@@ -7807,7 +7807,15 @@ function bindEntryForm(){
 }
 
 try{ if(sessionStorage.getItem('edit_mode_unlocked') === '1'){ editMode = true; } }catch(e){}
-try{ const u = sessionStorage.getItem('current_user'); if(u){ currentUser = JSON.parse(u); } }catch(e){}
+try{
+  const u = sessionStorage.getItem('current_user');
+  if(u){
+    currentUser = JSON.parse(u);
+    // إصلاح أمني: عند استعادة جلسة طالب تجريبي بعد إعادة تحميل الصفحة، يجب توجيهه فورًا
+    // لصفحته المقتصرة (٣ أيقونات فقط)، لا تركه على القيمة الافتراضية العامة (قائمة الطلاب الكاملة)
+    if(currentUser?.role === 'trialStudent'){ currentView = 'home'; }
+  }
+}catch(e){}
 try{
   const d = sessionStorage.getItem('current_domain');
   if(d === 'girls'){
