@@ -3229,9 +3229,11 @@ function renderTasmeeTracksHome(){
     : trialStudents.some(x=>x.id===currentStudentId) ? 'trialStudentsList'
     : 'category';
   const tracks = getStudentTracks(s.id);
+  const trialInfo0 = trialStudents.find(t=>t.id===s.id);
   if(!tracks.length){
     return '<span class="back-link" data-go="'+tbBack+'">← رجوع</span>'
       + '<div class="card"><h2 style="margin-top:0;">📄 التقرير</h2>'
+      + (trialInfo0 ? '<div class="small-muted" style="margin-top:-6px;margin-bottom:8px;">'+escapeHtml(trialInfo0.wilaya||'')+(trialInfo0.phone?' • '+escapeHtml(trialInfo0.phone):'')+'</div>' : '')
       + '<div class="empty">'+(currentStudentId===getSelfProfileId()?'لا يوجد أي مسار بعد. أنشئ مسارًا جديدًا أولًا.':'لا يوجد أي مسار بعد لهذا الطالب. أنشئ مسارًا جديدًا أولًا.')+'</div>'
       + '</div>';
   }
@@ -3251,8 +3253,10 @@ function renderTasmeeTracksHome(){
       + (stLabel ? '<div style="color:'+textColor+';font-size:13px;margin-top:6px;font-weight:bold;">'+stLabel+'</div>' : '')
       + '</div>';
   }).join('');
+  const trialInfo = trialStudents.find(t=>t.id===s.id);
   return '<span class="back-link" data-go="'+tbBack+'">← رجوع</span>'
     + '<div class="card"><h2 style="margin-top:0;text-align:center;">📄 مسارات '+escapeHtml(s.name)+'</h2>'
+    + (trialInfo ? '<div class="small-muted" style="text-align:center;margin-top:-8px;margin-bottom:10px;">'+escapeHtml(trialInfo.wilaya||'')+(trialInfo.phone?' • '+escapeHtml(trialInfo.phone):'')+'</div>' : '')
     + '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">'+boxes+'</div>'
     + '</div>';
 }
@@ -4076,6 +4080,49 @@ function bindJuzShortcutPage(){
 
 // بناء الترتيب الكامل لكل ما يمكن اختياره من القرآن، بنفس التقسيم المعتمد في قسم "التقييم":
 // الأجزاء ١-٣ بالأحزاب والأرباع، الأجزاء ٤-٢٥ كجزء كامل، الأجزاء ٢٦-٣٠ سورة سورة.
+// قائمة السور الـ١١٤ كاملة بترتيب المصحف مع عدد آيات كل سورة (العدّ المعتمد في المصحف الشائع)
+const QURAN_SURAHS = [
+  {n:1,name:'الفاتحة',ayahs:7},{n:2,name:'البقرة',ayahs:286},{n:3,name:'آل عمران',ayahs:200},
+  {n:4,name:'النساء',ayahs:176},{n:5,name:'المائدة',ayahs:120},{n:6,name:'الأنعام',ayahs:165},
+  {n:7,name:'الأعراف',ayahs:206},{n:8,name:'الأنفال',ayahs:75},{n:9,name:'التوبة',ayahs:129},
+  {n:10,name:'يونس',ayahs:109},{n:11,name:'هود',ayahs:123},{n:12,name:'يوسف',ayahs:111},
+  {n:13,name:'الرعد',ayahs:43},{n:14,name:'إبراهيم',ayahs:52},{n:15,name:'الحجر',ayahs:99},
+  {n:16,name:'النحل',ayahs:128},{n:17,name:'الإسراء',ayahs:111},{n:18,name:'الكهف',ayahs:110},
+  {n:19,name:'مريم',ayahs:98},{n:20,name:'طه',ayahs:135},{n:21,name:'الأنبياء',ayahs:112},
+  {n:22,name:'الحج',ayahs:78},{n:23,name:'المؤمنون',ayahs:118},{n:24,name:'النور',ayahs:64},
+  {n:25,name:'الفرقان',ayahs:77},{n:26,name:'الشعراء',ayahs:227},{n:27,name:'النمل',ayahs:93},
+  {n:28,name:'القصص',ayahs:88},{n:29,name:'العنكبوت',ayahs:69},{n:30,name:'الروم',ayahs:60},
+  {n:31,name:'لقمان',ayahs:34},{n:32,name:'السجدة',ayahs:30},{n:33,name:'الأحزاب',ayahs:73},
+  {n:34,name:'سبأ',ayahs:54},{n:35,name:'فاطر',ayahs:45},{n:36,name:'يس',ayahs:83},
+  {n:37,name:'الصافات',ayahs:182},{n:38,name:'ص',ayahs:88},{n:39,name:'الزمر',ayahs:75},
+  {n:40,name:'غافر',ayahs:85},{n:41,name:'فصلت',ayahs:54},{n:42,name:'الشورى',ayahs:53},
+  {n:43,name:'الزخرف',ayahs:89},{n:44,name:'الدخان',ayahs:59},{n:45,name:'الجاثية',ayahs:37},
+  {n:46,name:'الأحقاف',ayahs:35},{n:47,name:'محمد',ayahs:38},{n:48,name:'الفتح',ayahs:29},
+  {n:49,name:'الحجرات',ayahs:18},{n:50,name:'ق',ayahs:45},{n:51,name:'الذاريات',ayahs:60},
+  {n:52,name:'الطور',ayahs:49},{n:53,name:'النجم',ayahs:62},{n:54,name:'القمر',ayahs:55},
+  {n:55,name:'الرحمن',ayahs:78},{n:56,name:'الواقعة',ayahs:96},{n:57,name:'الحديد',ayahs:29},
+  {n:58,name:'المجادلة',ayahs:22},{n:59,name:'الحشر',ayahs:24},{n:60,name:'الممتحنة',ayahs:13},
+  {n:61,name:'الصف',ayahs:14},{n:62,name:'الجمعة',ayahs:11},{n:63,name:'المنافقون',ayahs:11},
+  {n:64,name:'التغابن',ayahs:18},{n:65,name:'الطلاق',ayahs:12},{n:66,name:'التحريم',ayahs:12},
+  {n:67,name:'الملك',ayahs:30},{n:68,name:'القلم',ayahs:52},{n:69,name:'الحاقة',ayahs:52},
+  {n:70,name:'المعارج',ayahs:44},{n:71,name:'نوح',ayahs:28},{n:72,name:'الجن',ayahs:28},
+  {n:73,name:'المزمل',ayahs:20},{n:74,name:'المدثر',ayahs:56},{n:75,name:'القيامة',ayahs:40},
+  {n:76,name:'الإنسان',ayahs:31},{n:77,name:'المرسلات',ayahs:50},{n:78,name:'النبأ',ayahs:40},
+  {n:79,name:'النازعات',ayahs:46},{n:80,name:'عبس',ayahs:42},{n:81,name:'التكوير',ayahs:29},
+  {n:82,name:'الانفطار',ayahs:19},{n:83,name:'المطففين',ayahs:36},{n:84,name:'الانشقاق',ayahs:25},
+  {n:85,name:'البروج',ayahs:22},{n:86,name:'الطارق',ayahs:17},{n:87,name:'الأعلى',ayahs:19},
+  {n:88,name:'الغاشية',ayahs:26},{n:89,name:'الفجر',ayahs:30},{n:90,name:'البلد',ayahs:20},
+  {n:91,name:'الشمس',ayahs:15},{n:92,name:'الليل',ayahs:21},{n:93,name:'الضحى',ayahs:11},
+  {n:94,name:'الشرح',ayahs:8},{n:95,name:'التين',ayahs:8},{n:96,name:'العلق',ayahs:19},
+  {n:97,name:'القدر',ayahs:5},{n:98,name:'البينة',ayahs:8},{n:99,name:'الزلزلة',ayahs:8},
+  {n:100,name:'العاديات',ayahs:11},{n:101,name:'القارعة',ayahs:11},{n:102,name:'التكاثر',ayahs:8},
+  {n:103,name:'العصر',ayahs:3},{n:104,name:'الهمزة',ayahs:9},{n:105,name:'الفيل',ayahs:5},
+  {n:106,name:'قريش',ayahs:4},{n:107,name:'الماعون',ayahs:7},{n:108,name:'الكوثر',ayahs:3},
+  {n:109,name:'الكافرون',ayahs:6},{n:110,name:'النصر',ayahs:3},{n:111,name:'المسد',ayahs:5},
+  {n:112,name:'الإخلاص',ayahs:4},{n:113,name:'الفلق',ayahs:5},{n:114,name:'الناس',ayahs:6},
+];
+function getSurahByNumber(n){ return QURAN_SURAHS.find(s=>s.n===n); }
+
 function buildFullQuranUnits(){
   const units = [];
   [1,2,3].forEach(j=>{
@@ -4100,20 +4147,8 @@ function buildFullQuranUnits(){
 function renderTasmeeQuickForm(){
   const s = resolveProfileEntity(currentStudentId);
   if(!s){ currentView='list'; return renderListView(); }
-  const units = buildFullQuranUnits();
 
-  let optsHtml = '';
-  let curJuz = null;
-  units.forEach((u,i)=>{
-    if(u.juz !== curJuz){
-      if(curJuz !== null) optsHtml += '</optgroup>';
-      optsHtml += '<optgroup label="📖 الجزء '+toAR(u.juz)+'">';
-      curJuz = u.juz;
-    }
-    const text = u.sub ? (u.label+' — '+u.sub) : u.label;
-    optsHtml += '<option value="'+i+'">'+escapeHtml(text)+'</option>';
-  });
-  optsHtml += '</optgroup>';
+  const surahOpts = QURAN_SURAHS.map(su=>'<option value="'+su.n+'">'+toAR(su.n)+' — '+escapeHtml(su.name)+'</option>').join('');
 
   const today = todayStr();
   const backTarget = (currentUser?.role === 'trialStudent') ? 'home' : 'category';
@@ -4124,36 +4159,91 @@ function renderTasmeeQuickForm(){
     +   '<div class="field" style="flex:1;"><label>من</label><input id="qt_date_from" type="date" value="'+today+'"></div>'
     +   '<div class="field" style="flex:1;"><label>إلى</label><input id="qt_date_to" type="date" value="'+addDaysStr(today,29)+'"></div>'
     + '</div>'
-    + '<h3 style="margin-bottom:6px;margin-top:14px;">مقدار المسار (من كامل القرآن)</h3>'
-    + '<p class="small-muted" style="margin-top:-4px;margin-bottom:8px;">اختر نقطة البداية والنهاية من أي مكان في القرآن — حزب أو ربع حزب، جزء كامل، أو سورة — بحسب ما هو معتمد في قسم "التقييم".</p>'
+    + '<h3 style="margin-bottom:10px;margin-top:14px;">مقدار المسار</h3>'
     + '<div style="display:flex;gap:8px;">'
-    +   '<div class="field" style="flex:1;"><label>من</label><select id="qt_surah_from">'+optsHtml+'</select></div>'
-    +   '<div class="field" style="flex:1;"><label>إلى</label><select id="qt_surah_to">'+optsHtml+'</select></div>'
+    +   '<div class="field" style="flex:1;"><label>من سورة</label><select id="qt_surah_from">'+surahOpts+'</select></div>'
+    +   '<div class="field" style="flex:1;"><label>من آية</label><input id="qt_ayah_from" type="number" min="1" value="1"></div>'
     + '</div>'
+    + '<div style="display:flex;gap:8px;">'
+    +   '<div class="field" style="flex:1;"><label>إلى سورة</label><select id="qt_surah_to">'+surahOpts+'</select></div>'
+    +   '<div class="field" style="flex:1;"><label>إلى آية</label><input id="qt_ayah_to" type="number" min="1" value="7"></div>'
+    + '</div>'
+    + '<div id="qtAmountError" style="color:var(--danger);font-size:13px;display:none;margin-bottom:8px;"></div>'
     + '<div class="row-actions" style="margin-top:14px;"><button id="saveQuickTrackBtn" class="btn btn-primary" style="width:100%;">حفظ المسار</button></div>'
     + '</div>';
 }
 
 function bindTasmeeQuickForm(){
   bindCommon();
+
+  // تصحيح تاريخ "إلى" تلقائيًا ليبقى في نفس شهر تاريخ "من" كلما تغيّر
+  const dateFromEl = document.getElementById('qt_date_from');
+  const dateToEl = document.getElementById('qt_date_to');
+  function syncToDateMonth(){
+    const fromVal = dateFromEl.value;
+    if(!fromVal) return;
+    const d = new Date(fromVal+'T00:00:00');
+    const lastDayOfMonth = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(lastDayOfMonth).padStart(2,'0');
+    dateToEl.value = y+'-'+m+'-'+dd;
+  }
+  if(dateFromEl && dateToEl){
+    syncToDateMonth();
+    dateFromEl.addEventListener('change', syncToDateMonth);
+  }
+
+  const surahFromEl = document.getElementById('qt_surah_from');
+  const surahToEl = document.getElementById('qt_surah_to');
+  const ayahFromEl = document.getElementById('qt_ayah_from');
+  const ayahToEl = document.getElementById('qt_ayah_to');
+  function clampAyahInputs(){
+    const fromSurah = getSurahByNumber(parseInt(surahFromEl.value));
+    const toSurah = getSurahByNumber(parseInt(surahToEl.value));
+    if(fromSurah){ ayahFromEl.max = fromSurah.ayahs; if(parseInt(ayahFromEl.value) > fromSurah.ayahs) ayahFromEl.value = fromSurah.ayahs; }
+    if(toSurah){ ayahToEl.max = toSurah.ayahs; if(parseInt(ayahToEl.value) > toSurah.ayahs) ayahToEl.value = toSurah.ayahs; }
+  }
+  if(surahFromEl) surahFromEl.addEventListener('change', clampAyahInputs);
+  if(surahToEl) surahToEl.addEventListener('change', clampAyahInputs);
+
   const saveBtn = document.getElementById('saveQuickTrackBtn');
   if(saveBtn){
     saveBtn.addEventListener('click', async ()=>{
-      const dateFrom = document.getElementById('qt_date_from').value;
-      const dateTo = document.getElementById('qt_date_to').value;
-      const fromIdx = parseInt(document.getElementById('qt_surah_from').value);
-      const toIdx = parseInt(document.getElementById('qt_surah_to').value);
+      const errEl = document.getElementById('qtAmountError');
+      function showErr(msg){ errEl.textContent = msg; errEl.style.display = 'block'; }
+      errEl.style.display = 'none';
+
+      const dateFrom = dateFromEl.value;
+      const dateTo = dateToEl.value;
       if(!dateFrom || !dateTo){ showToast('حدّد تاريخ البداية والنهاية'); return; }
       if(dateTo < dateFrom){ showToast('تاريخ النهاية يجب أن يكون بعد البداية'); return; }
-      const units = buildFullQuranUnits();
-      const lo = Math.min(fromIdx, toIdx), hi = Math.max(fromIdx, toIdx);
-      const unitRange = units.slice(lo, hi+1);
+
+      const surahFromNum = parseInt(surahFromEl.value);
+      const surahToNum = parseInt(surahToEl.value);
+      const ayahFrom = parseInt(ayahFromEl.value);
+      const ayahTo = parseInt(ayahToEl.value);
+      const fromSurah = getSurahByNumber(surahFromNum);
+      const toSurah = getSurahByNumber(surahToNum);
+
+      if(surahToNum < surahFromNum){ showErr('سورة النهاية يجب أن تكون بعد سورة البداية أو نفسها'); return; }
+      if(!ayahFrom || ayahFrom < 1 || ayahFrom > fromSurah.ayahs){ showErr('رقم آية البداية غير صحيح — سورة '+fromSurah.name+' عدد آياتها '+fromSurah.ayahs); return; }
+      if(!ayahTo || ayahTo < 1 || ayahTo > toSurah.ayahs){ showErr('رقم آية النهاية غير صحيح — سورة '+toSurah.name+' عدد آياتها '+toSurah.ayahs); return; }
+      if(surahFromNum === surahToNum && ayahTo < ayahFrom){ showErr('آية النهاية يجب أن تكون بعد آية البداية أو نفسها'); return; }
+
       const totalDays = Math.max(1, Math.round((new Date(dateTo)-new Date(dateFrom))/86400000));
-      const items = unitRange.map((u,i)=>{
-        const dayOffset = unitRange.length>1 ? Math.round(i*totalDays/(unitRange.length-1)) : 0;
-        return { id:uid(), label:u.key, detail:'', date: addDaysStr(dateFrom, dayOffset), isBuffer:false, rating:0, reviewNotes:'', doneDate:null };
+      const spanSurahs = QURAN_SURAHS.filter(su=>su.n >= surahFromNum && su.n <= surahToNum);
+      const items = spanSurahs.map((su,i)=>{
+        const dayOffset = spanSurahs.length>1 ? Math.round(i*totalDays/(spanSurahs.length-1)) : 0;
+        const startA = (su.n === surahFromNum) ? ayahFrom : 1;
+        const endA = (su.n === surahToNum) ? ayahTo : su.ayahs;
+        const detail = 'من آية '+toAR(startA)+' إلى آية '+toAR(endA);
+        return { id:uid(), label:su.name, detail, date: addDaysStr(dateFrom, dayOffset), isBuffer:false, rating:0, reviewNotes:'', doneDate:null };
       });
-      const amountLabel = unitRange.length>1 ? ('من '+unitRange[0].label+' إلى '+unitRange[unitRange.length-1].label) : unitRange[0].label;
+      const amountLabel = (surahFromNum === surahToNum)
+        ? (fromSurah.name+' (من آية '+toAR(ayahFrom)+' إلى آية '+toAR(ayahTo)+')')
+        : ('من '+fromSurah.name+' آية '+toAR(ayahFrom)+' إلى '+toSurah.name+' آية '+toAR(ayahTo));
+
       const ok = await appendTrack({ id:uid(), studentId:currentStudentId, amount:amountLabel, durationDays: totalDays, startDate: dateFrom, teacher: currentUser?.name||'', items });
       toastSave(ok, 'تم حفظ المسار');
       currentView = (currentUser?.role === 'trialStudent') ? 'tasmeeTracksHome' : 'category';
