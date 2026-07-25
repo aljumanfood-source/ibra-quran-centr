@@ -2098,7 +2098,16 @@ function bindTrialRegisterForm(){
     if(!pin || pin.length < 4){ showErr('رقم العبور يجب أن يكون ٤ أرقام على الأقل'); return; }
     if(pin !== pin2){ showErr('رقم العبور غير متطابق مع إعادته'); return; }
     if(trialStudents.some(t=>t.username.trim()===username)){ showErr('اسم الدخول هذا مستخدم بالفعل، اختر اسمًا آخر'); return; }
-    trialStudents.push({ id:uid(), name, phone, wilaya, username, pin, createdAt: todayStr() });
+
+    // جلب أحدث نسخة فعلية من قاعدة البيانات مباشرة قبل الحفظ، لمنع محو تسجيلات طلاب آخرين سجّلوا في نفس الفترة من أجهزة أخرى
+    let latestList;
+    try{
+      const latest = await storeGet(TRIAL_STUDENTS_KEY);
+      latestList = latest ? JSON.parse(latest) : [];
+    }catch(e){ latestList = trialStudents.slice(); }
+    if(latestList.some(t=>t.username.trim()===username)){ showErr('اسم الدخول هذا مستخدم بالفعل، اختر اسمًا آخر'); return; }
+    latestList.push({ id:uid(), name, phone, wilaya, username, pin, createdAt: todayStr() });
+    trialStudents = latestList;
     const ok = await saveTrialStudents();
     if(ok){
       window.__trialRegSuccessUsername = username;
