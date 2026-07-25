@@ -1259,6 +1259,21 @@ async function loadTasmee(){
 async function saveTasmeeRaw(){
   return await storeSet(TASMEE_KEY, JSON.stringify(tasmeeData));
 }
+// حفظ آمن لتعديل عنصر واحد داخل مسار: يجلب أحدث نسخة فعلية من قاعدة البيانات أولًا، يُطبِّق التعديل عليها، ثم يحفظ الكل معًا
+// هذا يمنع أن يمحو حفظ من جهاز ما تعديلات حصلت من جهاز آخر في نفس الفترة (نفس مبدأ appendTrack)
+async function safeUpdateTasmeeItem(trackId, itemId, mutateFn){
+  let latest;
+  try{
+    const raw = await storeGet(TASMEE_KEY);
+    latest = raw ? JSON.parse(raw) : tasmeeData.slice();
+  }catch(e){ latest = tasmeeData.slice(); }
+  const track = latest.find(t=>t.id===trackId);
+  const item = track && track.items && track.items.find(it=>it.id===itemId);
+  if(!item) return false;
+  mutateFn(item);
+  tasmeeData = latest;
+  return await saveTasmeeRaw();
+}
 function getActiveTrack(studentId){
   return tasmeeData.find(t=>t.studentId===studentId);
 }
@@ -3344,7 +3359,7 @@ function renderTrialRecordingPage(){
     let bodyHtml;
     if(evaluated){
       const errCount = Object.keys(it.wordErrors||{}).length;
-      if(errCount === 0 || !it.surahNum){
+      if(errCount === 0 || !inferItemSurahAyah(it)){
         bodyHtml = '<div style="color:#1a8a5a;font-weight:900;font-size:15px;">⭐ '+(RATING_LABELS[it.rating]||'ممتاز')+'</div>';
       } else {
         const words = buildItemWordsList(it);
@@ -3399,10 +3414,11 @@ function bindTrialRecordingPage(){
   document.querySelectorAll('[data-rerecord-btn]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const itemId = btn.getAttribute('data-rerecord-btn');
+      await safeUpdateTasmeeItem(window.__currentTasmeeTrackId, itemId, (it)=>{ delete it.pendingAudio; });
       const s = resolveProfileEntity(currentStudentId);
       const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
       const it = track?.items?.find(x=>x.id===itemId);
-      if(it){ delete it.pendingAudio; await saveTasmeeRaw(); }
+      if(it) delete it.pendingAudio;
       render();
     });
   });
@@ -3452,14 +3468,14 @@ function bindTrialRecordingPage(){
           uiBox.querySelector('[data-record-send]').addEventListener('click', async ()=>{
             const reader = new FileReader();
             reader.onload = async ()=>{
+              const audioData = reader.result;
+              const ok = await safeUpdateTasmeeItem(window.__currentTasmeeTrackId, itemId, (it)=>{ it.pendingAudio = audioData; });
+              toastSave(ok, '📤 تم إرسال التسجيل للمعلم');
+              // تحديث الحالة المحلية أيضًا لتعكس الإرسال فورًا في هذه الصفحة
               const s = resolveProfileEntity(currentStudentId);
-              const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
-              const it = track?.items?.find(x=>x.id===itemId);
-              if(it){
-                it.pendingAudio = reader.result;
-                const ok = await saveTasmeeRaw();
-                toastSave(ok, '📤 تم إرسال التسجيل للمعلم');
-              }
+              const trackLocal = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
+              const itLocal = trackLocal?.items?.find(x=>x.id===itemId);
+              if(itLocal) itLocal.pendingAudio = audioData;
               render();
             };
             reader.readAsDataURL(blob);
@@ -3498,7 +3514,7 @@ function renderTrialAdminEvaluationPage(){
   }).join('');
 
   const openItem = window.__openTasmeeItem ? items.find(it=>it.id===window.__openTasmeeItem) : null;
-  const popup = openItem ? (openItem.surahNum ? renderInteractiveTasmeeReview(openItem) : renderTasmeeItemPopup(openItem)) : '';
+  const popup = openItem ? (inferItemSurahAyah(openItem) ? renderInteractiveTasmeeReview(openItem) : renderTasmeeItemPopup(openItem)) : '';
 
   return '<span class="back-link" data-go="tasmeeTracksHome">← رجوع لمسارات الطالب</span>'
     + '<div class="card"><h2 style="margin:0;">🎧 تقييم تسميع — '+escapeHtml(s.name)+'</h2>'
@@ -3592,10 +3608,18 @@ function bindInteractiveTasmeeReview(item){
   if(finalizeBtn){
     finalizeBtn.addEventListener('click', async ()=>{
       const errorCount = Object.keys(item.wordErrors||{}).length;
-      item.rating = errorCount === 0 ? 5 : Math.max(1, 5 - errorCount);
-      item.doneDate = todayStr();
+      const finalRating = errorCount === 0 ? 5 : Math.max(1, 5 - errorCount);
+      const finalDoneDate = todayStr();
+      const finalWordErrors = item.wordErrors || {};
+      const ok = await safeUpdateTasmeeItem(window.__currentTasmeeTrackId, item.id, (it)=>{
+        it.wordErrors = finalWordErrors;
+        it.rating = finalRating;
+        it.doneDate = finalDoneDate;
+        delete it.pendingAudio;
+      });
+      item.rating = finalRating;
+      item.doneDate = finalDoneDate;
       delete item.pendingAudio;
-      const ok = await saveTasmeeRaw();
       toastSave(ok, '✅ تم إرسال التقييم للطالب');
       window.__openTasmeeItem = null;
       render();
@@ -3617,7 +3641,7 @@ function bindTrialAdminEvaluationPage(){
     const s0 = resolveProfileEntity(currentStudentId);
     const track0 = s0 && tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s0.id);
     const openItem0 = track0 && track0.items.find(it=>it.id===window.__openTasmeeItem);
-    if(openItem0 && openItem0.surahNum){ bindInteractiveTasmeeReview(openItem0); }
+    if(openItem0 && inferItemSurahAyah(openItem0)){ bindInteractiveTasmeeReview(openItem0); }
   }
   // تنظيف تلقائي: أي عنصر أصبح له تقييم فعلي الآن ولا يزال يحمل تسجيلاً صوتيًا مؤقتًا، يُحذف صوته من قاعدة البيانات فورًا
   const s = resolveProfileEntity(currentStudentId);
@@ -4277,12 +4301,30 @@ function getVerseText(surahNum, ayahNum){
   const arr = QURAN_TEXT_DATA[surahNum];
   return arr ? (arr[ayahNum-1] || '') : '';
 }
+// استنتاج بيانات السورة/الآية للعناصر القديمة (أُنشئت قبل إضافة الحقول الرقمية) من اسم السورة ونص التفاصيل المحفوظ أصلًا
+function toEnglishDigits(s){
+  return parseInt(String(s).replace(/[٠-٩]/g, d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)), 10);
+}
+function inferItemSurahAyah(item){
+  if(item.surahNum){ return { surahNum:item.surahNum, ayahFrom:item.ayahFrom||1, ayahTo:item.ayahTo||1 }; }
+  const surah = QURAN_SURAHS.find(s=>s.name===item.label);
+  if(!surah) return null;
+  if(item.detail){
+    const m = item.detail.match(/آية\s*([٠-٩0-9]+)[\s\S]*?آية\s*([٠-٩0-9]+)/);
+    if(m){
+      const a1 = toEnglishDigits(m[1]), a2 = toEnglishDigits(m[2]);
+      if(a1 && a2) return { surahNum:surah.n, ayahFrom:a1, ayahTo:a2 };
+    }
+  }
+  return { surahNum:surah.n, ayahFrom:1, ayahTo:surah.ayahs };
+}
 // يبني قائمة كلمات مسطّحة لعنصر مسار (قد يشمل عدة آيات)، كل كلمة بمعرّف فريد ضمن العنصر
 function buildItemWordsList(item){
   const words = [];
-  if(!item.surahNum) return words;
-  for(let a = item.ayahFrom; a <= item.ayahTo; a++){
-    const text = getVerseText(item.surahNum, a);
+  const info = inferItemSurahAyah(item);
+  if(!info) return words;
+  for(let a = info.ayahFrom; a <= info.ayahTo; a++){
+    const text = getVerseText(info.surahNum, a);
     text.split(/\s+/).filter(Boolean).forEach((w, wi)=>{
       words.push({ ayah:a, text:w, key:a+'_'+wi });
     });
