@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>مركز ابراء العلمي | متابعة الطلاب</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&display=swap" rel="stylesheet">
 <style>
   :root{
     --teal-dark:#1b3433;
@@ -3365,12 +3368,12 @@ function renderTrialRecordingPage(){
         const words = buildItemWordsList(it);
         const wordsHtml = words.map(w=>{
           const err = (it.wordErrors||{})[w.key];
-          if(!err) return '<span style="padding:3px 4px;">'+escapeHtml(w.text)+'</span>';
+          if(!err) return '<span style="padding:5px 6px;">'+escapeHtml(w.text)+'</span>';
           const bg = err.type==='tashkeel' ? '#fde9c8' : '#fbdada';
-          return '<span data-student-word-fix="'+it.id+'|'+w.key+'" style="cursor:pointer;padding:3px 4px;border-radius:5px;background:'+bg+';box-shadow:0 0 0 1px rgba(0,0,0,.15);">'+escapeHtml(w.text)+' 🔊</span>';
+          return '<span data-student-word-fix="'+it.id+'|'+w.key+'" style="cursor:pointer;padding:5px 6px;margin:2px;border-radius:6px;background:'+bg+';box-shadow:0 0 0 2px rgba(0,0,0,.15);">'+escapeHtml(w.text)+' 🔊</span>';
         }).join(' ');
         bodyHtml = '<div class="small-muted" style="margin-bottom:6px;">التقييم: '+(RATING_LABELS[it.rating]||'')+' — اضغط على الكلمات الملوَّنة للاستماع للتصحيح</div>'
-          + '<div style="line-height:2.8;font-size:18px;text-align:right;direction:rtl;">'+wordsHtml+'</div>';
+          + '<div style="line-height:3.1;font-size:23px;text-align:right;direction:rtl;font-family:\'Amiri Quran\',serif;word-spacing:4px;">'+wordsHtml+'</div>';
       }
     } else {
       bodyHtml = (sent
@@ -3529,9 +3532,10 @@ function renderInteractiveTasmeeReview(item){
   const errors = item.wordErrors || {};
   const wordsHtml = words.map(w=>{
     const err = errors[w.key];
-    let style = 'cursor:pointer;padding:3px 4px;border-radius:5px;display:inline-block;';
+    let style = 'cursor:pointer;padding:6px 7px;margin:2px;border-radius:6px;display:inline-block;background:#f4f6f5;transition:background .15s;';
     if(err){
-      style += err.type==='tashkeel' ? 'background:#fde9c8;box-shadow:0 0 0 1px #e0b25a;' : 'background:#fbdada;text-decoration:line-through;box-shadow:0 0 0 1px #d98a8a;';
+      style = 'cursor:pointer;padding:6px 7px;margin:2px;border-radius:6px;display:inline-block;';
+      style += err.type==='tashkeel' ? 'background:#fde9c8;box-shadow:0 0 0 2px #e0b25a;' : 'background:#fbdada;text-decoration:line-through;box-shadow:0 0 0 2px #d98a8a;';
     }
     return '<span data-word-key="'+w.key+'" data-word-text="'+escapeAttr(w.text)+'" style="'+style+'">'+escapeHtml(w.text)+'</span>';
   }).join(' ');
@@ -3540,7 +3544,7 @@ function renderInteractiveTasmeeReview(item){
   return '<div class="card" id="tasmeeItemPopup">'
     + '<h3 style="margin-top:0;">'+escapeHtml(item.label)+(item.detail?' — '+escapeHtml(item.detail):'')+'</h3>'
     + '<p class="small-muted" style="margin-top:-6px;">اضغط على أي كلمة أخطأ فيها الطالب لتحديد نوع الخطأ.</p>'
-    + '<div id="ayahInteractiveText" style="line-height:2.8;font-size:19px;text-align:right;direction:rtl;">'+wordsHtml+'</div>'
+    + '<div id="ayahInteractiveText" style="line-height:3.1;font-size:24px;text-align:right;direction:rtl;font-family:\'Amiri Quran\',serif;word-spacing:4px;">'+wordsHtml+'</div>'
     + '<div id="wordChoiceBox" style="display:none;margin-top:12px;background:var(--teal-pale);border-radius:10px;padding:10px;"></div>'
     + '<div id="interactiveEvalSummary" class="small-muted" style="margin-top:10px;">'+(errorCount ? errorCount+' كلمة بحاجة لمراجعة' : 'لا يوجد أي خطأ محدَّد حتى الآن')+'</div>'
     + '<div class="row-actions" style="margin-top:14px;"><button id="finalizeInteractiveEvalBtn" class="btn btn-primary" style="width:100%;">✅ تقييم</button></div>'
