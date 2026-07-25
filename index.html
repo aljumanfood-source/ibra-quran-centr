@@ -502,6 +502,8 @@ function resolveProfileEntity(id){
   if(currentUser && id === getSelfProfileId()){
     return { id: getSelfProfileId(), name: currentUser.name, grade:'', school:'', phone:'', address:'' };
   }
+  const trial = trialStudents.find(x=>x.id===id);
+  if(trial) return { id: trial.id, name: trial.name, grade:'', school:'', phone:trial.phone||'', address:trial.wilaya||'' };
   return students.find(x=>x.id===id);
 }
 let editingStudentId = null;
@@ -1095,6 +1097,19 @@ async function saveSummerSealedMessages(){
   return await storeSet(SUMMER_SEALED_KEY, JSON.stringify(summerSealedMessages));
 }
 
+// ========== طلاب تجريبيون من خارج المركز ==========
+const TRIAL_STUDENTS_KEY = 'trial_students_v1';
+let trialStudents = [];
+async function loadTrialStudents(){
+  try{ const r = await storeGet(TRIAL_STUDENTS_KEY); trialStudents = r ? JSON.parse(r) : []; }catch(e){ trialStudents = []; }
+}
+async function saveTrialStudents(){
+  return await storeSet(TRIAL_STUDENTS_KEY, JSON.stringify(trialStudents));
+}
+function canManageTrialStudents(){
+  return currentUser?.role === 'admin';
+}
+
 async function loadEvents(){
   try{ const r = await storeGet(EVENTS_KEY); eventsData = r ? JSON.parse(r) : []; }
   catch(e){ eventsData = []; }
@@ -1479,6 +1494,7 @@ async function loadData(){
   await loadTasks();
   await loadSummerMemories();
   await loadSummerSealedMessages();
+  await loadTrialStudents();
   await loadCircles();
   await loadCircleAttendance();
   await loadNotifs();
@@ -1654,7 +1670,7 @@ function canEvaluate(){
 
 // ---------- RENDER ----------
 function render(){
-  if(!currentUser && currentView !== 'login'){
+  if(!currentUser && currentView !== 'login' && currentView !== 'trialRegisterForm' && currentView !== 'trialRegisterSuccess'){
     currentView = 'login';
   }
   const isEditingOwnProfile = currentUser?.role==='student' && editingStudentId===currentUser?.studentId;
@@ -1673,6 +1689,17 @@ function render(){
     app.innerHTML = renderLogin();
     bindLogin();
     renderEditModeBar();
+    return;
+  }
+  if(currentView === 'trialRegisterForm'){
+    document.querySelector('header').style.display = 'flex';
+    app.innerHTML = renderTrialRegisterForm();
+    bindTrialRegisterForm();
+    return;
+  }
+  if(currentView === 'trialRegisterSuccess'){
+    document.querySelector('header').style.display = 'flex';
+    app.innerHTML = renderTrialRegisterSuccess();
     return;
   }
   document.querySelector('header').style.display = 'flex';
@@ -1794,6 +1821,15 @@ function render(){
   } else if(currentView === 'tasmeeEvaluationPage'){
     app.innerHTML = renderTasmeeEvaluationPage();
     bindTasmeeEvaluationPage();
+  } else if(currentView === 'trialRecordingPage'){
+    app.innerHTML = renderTrialRecordingPage();
+    bindTrialRecordingPage();
+  } else if(currentView === 'trialAdminEvaluationPage'){
+    app.innerHTML = renderTrialAdminEvaluationPage();
+    bindTrialAdminEvaluationPage();
+  } else if(currentView === 'trialStudentsList'){
+    app.innerHTML = renderTrialStudentsList();
+    bindTrialStudentsList();
   } else if(currentView === 'tasmeeForm'){
     app.innerHTML = renderTasmeeForm();
     bindTasmeeForm();
@@ -1820,6 +1856,25 @@ function renderHome(){
       <h2 style="margin:0 0 4px;color:var(--teal-dark);font-size:20px;">مركز ابراء العلمي</h2>
       <p class="small-muted" style="margin:0 0 6px;">${greeting}</p>
     </div>`;
+
+  // طالب تجريبي من خارج المركز: صفحة مقتصرة على ٣ أيقونات فقط
+  if(currentUser?.role === 'trialStudent'){
+    return header + `
+    <div class="home-dial-grid" style="grid-template-columns:repeat(3,1fr);max-width:400px;">
+      <div class="home-dial-item" data-home-go="trialNewTrack">
+        <div class="home-dial-circle">➕</div>
+        <div class="home-dial-label">مسار جديد</div>
+      </div>
+      <div class="home-dial-item" data-home-go="trialTasmeeHome">
+        <div class="home-dial-circle">🎤</div>
+        <div class="home-dial-label">تسميع</div>
+      </div>
+      <div class="home-dial-item" data-home-go="trialAchievements">
+        <div class="home-dial-circle">🏆</div>
+        <div class="home-dial-label">إنجاز</div>
+      </div>
+    </div>`;
+  }
 
   // قسم الطالبات: قائمة مصغّرة فقط — قائمة الطالبات، الحلقات، صفحتي
   if(currentDomain === 'girls'){
@@ -1894,6 +1949,11 @@ function renderAdminHome(){
           <div class="home-dial-circle">🌞</div>
           <div class="home-dial-label">ذكرى صيف ١٤٤٨هـ</div>
         </div>
+        ${canManageTrialStudents() ? `
+        <div class="home-dial-item" data-home-go="trialStudentsList">
+          <div class="home-dial-circle">🎓</div>
+          <div class="home-dial-label">الطلاب التجريبيون</div>
+        </div>` : ''}
       </div>
     </div>
   `;
@@ -1910,6 +1970,19 @@ function bindHome(){
       } else if(go === 'supPage'){
         currentView = 'supPage';
         window.__supTab = null;
+      } else if(go === 'trialNewTrack'){
+        currentStudentId = currentUser.trialStudentId;
+        currentCategory = 'hifz';
+        currentView = 'tasmeeQuickForm';
+      } else if(go === 'trialTasmeeHome'){
+        currentStudentId = currentUser.trialStudentId;
+        currentCategory = 'hifz';
+        currentView = 'tasmeeTracksHome';
+      } else if(go === 'trialAchievements'){
+        currentStudentId = currentUser.trialStudentId;
+        currentCategory = 'hifz';
+        window.__achievementsBackView = 'home';
+        currentView = 'achievementsReport';
       } else {
         currentView = go;
         showFollowMenu = false;
@@ -1987,6 +2060,71 @@ function bindLogin(){
   nameInput?.addEventListener('blur', ()=>{ setTimeout(()=>{ suggBox.style.display='none'; }, 150); });
 }
 
+// ========== تسجيل طالب تجريبي من خارج المركز ==========
+function renderTrialRegisterForm(){
+  return `
+    <div style="max-width:460px;margin:0 auto;padding:20px 16px;">
+      <div class="card" style="text-align:center;">
+        <h2 style="border:none;padding:0;color:var(--teal-dark);">مركز ابراء العلمي</h2>
+        <p class="small-muted" style="margin:4px 0 0;">تسجيل تجريبي لطالب من خارج المركز</p>
+      </div>
+      <div class="card">
+        <div class="field"><label>الاسم الثلاثي</label><input id="trial_name" type="text" placeholder="مثال: محمد بن سالم بن علي"></div>
+        <div class="field"><label>رقم الهاتف</label><input id="trial_phone" type="tel" placeholder="رقم الهاتف"></div>
+        <div class="field"><label>الولاية / القرية</label><input id="trial_wilaya" type="text" placeholder="مثال: إبراء / سيح العافية"></div>
+        <div class="field"><label>اسم الدخول المقترح</label><input id="trial_username" type="text" placeholder="اختر اسم دخول بالعربية أو الإنجليزية"></div>
+        <div class="field"><label>رقم العبور</label><input id="trial_pin" type="password" inputmode="numeric" placeholder="٤ أرقام على الأقل"></div>
+        <div class="field"><label>إعادة رقم العبور</label><input id="trial_pin2" type="password" inputmode="numeric" placeholder="أعد كتابة رقم العبور"></div>
+        <div id="trialRegError" style="color:var(--danger);font-size:13px;display:none;margin-bottom:8px;"></div>
+        <button id="submitTrialRegBtn" class="btn btn-primary" style="width:100%;">تسجيل</button>
+      </div>
+    </div>
+  `;
+}
+function bindTrialRegisterForm(){
+  const btn = document.getElementById('submitTrialRegBtn');
+  if(!btn) return;
+  btn.addEventListener('click', async ()=>{
+    const name = document.getElementById('trial_name').value.trim();
+    const phone = document.getElementById('trial_phone').value.trim();
+    const wilaya = document.getElementById('trial_wilaya').value.trim();
+    const username = document.getElementById('trial_username').value.trim();
+    const pin = document.getElementById('trial_pin').value.trim();
+    const pin2 = document.getElementById('trial_pin2').value.trim();
+    const errEl = document.getElementById('trialRegError');
+    function showErr(msg){ errEl.textContent = msg; errEl.style.display = 'block'; }
+    if(!name){ showErr('اكتب الاسم الثلاثي'); return; }
+    if(!username){ showErr('اكتب اسم الدخول المقترح'); return; }
+    if(!pin || pin.length < 4){ showErr('رقم العبور يجب أن يكون ٤ أرقام على الأقل'); return; }
+    if(pin !== pin2){ showErr('رقم العبور غير متطابق مع إعادته'); return; }
+    if(trialStudents.some(t=>t.username.trim()===username)){ showErr('اسم الدخول هذا مستخدم بالفعل، اختر اسمًا آخر'); return; }
+    trialStudents.push({ id:uid(), name, phone, wilaya, username, pin, createdAt: todayStr() });
+    const ok = await saveTrialStudents();
+    if(ok){
+      window.__trialRegSuccessUsername = username;
+      currentView = 'trialRegisterSuccess';
+      render();
+    } else {
+      showErr('حدث خطأ أثناء الحفظ، حاول مرة أخرى');
+    }
+  });
+}
+function renderTrialRegisterSuccess(){
+  const username = window.__trialRegSuccessUsername || '';
+  return `
+    <div style="max-width:460px;margin:0 auto;padding:20px 16px;">
+      <div class="card" style="text-align:center;">
+        <div style="font-size:40px;">✅</div>
+        <h2 style="border:none;padding:0;color:var(--teal-dark);">تم التسجيل بنجاح</h2>
+        <p class="small-muted">يمكنك الآن الدخول للتطبيق باسم الدخول ورقم العبور اللذين اخترتهما:</p>
+        <div style="background:var(--teal-pale);border-radius:10px;padding:12px;margin-top:10px;font-weight:bold;color:var(--teal-dark);">
+          اسم الدخول: ${escapeHtml(username)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // يبحث عن الاسم (مطابقة تامة بعد إزالة الفراغات الزائدة) عبر القوائم الأربع بالترتيب:
 // معلمون (بنين) ← معلمات (بنات) ← طلاب (بنين) ← طالبات (بنات)
 // ثم يتحقق من رقم العبور الخاص بنفس السجل الذي طابق الاسم فقط.
@@ -2038,6 +2176,14 @@ async function doLoginAction(){
       await switchDomain('girls');
       const stAfter = students.find(s=>s.id===st.id) || st;
       currentUser = { name: stAfter.name, role:'student', studentId: stAfter.id };
+      finishLogin(); return;
+    }
+
+    // 5) طالب تجريبي من خارج المركز
+    const trial = trialStudents.find(t=>t.username.trim()===nameInput);
+    if(trial){
+      if(trial.pin !== pin){ genericError(); return; }
+      currentUser = { name: trial.name, role:'trialStudent', trialStudentId: trial.id };
       finishLogin(); return;
     }
 
@@ -3079,9 +3225,12 @@ function renderAchievementsReport(){
 function renderTasmeeTracksHome(){
   const s = resolveProfileEntity(currentStudentId);
   if(!s){ currentView='list'; return renderListView(); }
+  const tbBack = (currentUser?.role === 'trialStudent') ? 'home'
+    : trialStudents.some(x=>x.id===currentStudentId) ? 'trialStudentsList'
+    : 'category';
   const tracks = getStudentTracks(s.id);
   if(!tracks.length){
-    return '<span class="back-link" data-go="category">← رجوع</span>'
+    return '<span class="back-link" data-go="'+tbBack+'">← رجوع</span>'
       + '<div class="card"><h2 style="margin-top:0;">📄 التقرير</h2>'
       + '<div class="empty">'+(currentStudentId===getSelfProfileId()?'لا يوجد أي مسار بعد. أنشئ مسارًا جديدًا أولًا.':'لا يوجد أي مسار بعد لهذا الطالب. أنشئ مسارًا جديدًا أولًا.')+'</div>'
       + '</div>';
@@ -3102,7 +3251,7 @@ function renderTasmeeTracksHome(){
       + (stLabel ? '<div style="color:'+textColor+';font-size:13px;margin-top:6px;font-weight:bold;">'+stLabel+'</div>' : '')
       + '</div>';
   }).join('');
-  return '<span class="back-link" data-go="category">← رجوع</span>'
+  return '<span class="back-link" data-go="'+tbBack+'">← رجوع</span>'
     + '<div class="card"><h2 style="margin-top:0;text-align:center;">📄 مسارات '+escapeHtml(s.name)+'</h2>'
     + '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">'+boxes+'</div>'
     + '</div>';
@@ -3116,7 +3265,9 @@ function bindTasmeeTracksHome(){
       window.__openTasmeeItem = null;
       window.__tasmeeReportImageUrl = null;
       window.__tasmeeReportBlob = null;
-      currentView = (currentStudentId === getSelfProfileId()) ? 'tasmeeEvaluationPage' : 'tasmeeHome';
+      currentView = (currentUser?.role === 'trialStudent') ? 'trialRecordingPage'
+        : trialStudents.some(t=>t.id===currentStudentId) ? 'trialAdminEvaluationPage'
+        : (currentStudentId === getSelfProfileId()) ? 'tasmeeEvaluationPage' : 'tasmeeHome';
       render();
     });
   });
@@ -3163,6 +3314,197 @@ function renderTasmeeEvaluationPage(){
 function bindTasmeeEvaluationPage(){
   // إعادة استخدام كل معالجات التقييم (نجوم/عدد أخطاء/حفظ) الموجودة أصلًا في bindTasmeeHome دون أي تكرار للكود
   bindTasmeeHome();
+}
+
+// ========== صفحة تسجيل التسميع الصوتي (الطالب التجريبي من خارج المركز) ==========
+const TRIAL_AUDIO_MAX_SECONDS = 300; // 5 دقائق كحد أقصى
+function renderTrialRecordingPage(){
+  const s = resolveProfileEntity(currentStudentId);
+  if(!s){ currentView='list'; return renderListView(); }
+  const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
+  if(!track){ currentView='tasmeeTracksHome'; return renderTasmeeTracksHome(); }
+
+  const items = track.items || [];
+  const rows = items.map(it=>{
+    const sent = !!it.pendingAudio;
+    return '<div class="record-card" data-trial-item-row="'+it.id+'" style="padding:12px;">'
+      + '<div style="font-weight:bold;color:var(--teal-dark);margin-bottom:8px;">'+escapeHtml(it.label)+'</div>'
+      + '<div data-recorder-ui="'+it.id+'">'
+      +   (sent
+            ? '<div style="color:#1a8a5a;font-weight:bold;font-size:13px;">✅ أُرسل التسجيل، بانتظار تقييم المعلم</div>'
+              + '<div class="row-actions" style="margin-top:8px;"><button data-rerecord-btn="'+it.id+'" class="btn btn-outline" style="font-size:12px;">🔄 إعادة التسجيل</button></div>'
+            : '<button data-record-start="'+it.id+'" class="btn btn-gold" style="width:100%;">🎤 تسميع</button>')
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<span class="back-link" data-go="tasmeeTracksHome">← رجوع لقائمة المسارات</span>'
+    + '<div class="card"><h2 style="margin:0;">🎤 تسميع — '+escapeHtml(track.amount||'')+'</h2></div>'
+    + rows;
+}
+
+function bindTrialRecordingPage(){
+  bindCommon();
+  document.querySelectorAll('[data-rerecord-btn]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const itemId = btn.getAttribute('data-rerecord-btn');
+      const s = resolveProfileEntity(currentStudentId);
+      const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
+      const it = track?.items?.find(x=>x.id===itemId);
+      if(it){ delete it.pendingAudio; await saveTasmeeRaw(); }
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-record-start]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const itemId = btn.getAttribute('data-record-start');
+      const uiBox = document.querySelector('[data-recorder-ui="'+itemId+'"]');
+      if(!uiBox) return;
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        uiBox.innerHTML = '<div style="color:var(--danger);font-size:12.5px;">هذا المتصفح لا يدعم تسجيل الصوت.</div>';
+        return;
+      }
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        const mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
+          ? 'audio/webm;codecs=opus'
+          : (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+        const recorder = mimeType ? new MediaRecorder(stream, {mimeType}) : new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
+        let seconds = 0;
+        uiBox.innerHTML = '<div style="text-align:center;">'
+          + '<div style="font-size:22px;font-weight:900;color:var(--danger);" data-record-timer>00:00</div>'
+          + '<button data-record-stop="'+itemId+'" class="btn btn-danger" style="width:100%;margin-top:8px;">⏹ إيقاف</button>'
+          + '</div>';
+        const timerEl = uiBox.querySelector('[data-record-timer]');
+        uiBox.querySelector('[data-record-stop]').addEventListener('click', ()=>{ recorder.stop(); });
+        const timerInterval = setInterval(()=>{
+          seconds++;
+          const m = String(Math.floor(seconds/60)).padStart(2,'0');
+          const sec = String(seconds%60).padStart(2,'0');
+          if(timerEl) timerEl.textContent = m+':'+sec;
+          if(seconds >= TRIAL_AUDIO_MAX_SECONDS){ recorder.stop(); }
+        }, 1000);
+
+        recorder.onstop = ()=>{
+          clearInterval(timerInterval);
+          stream.getTracks().forEach(t=>t.stop());
+          const blob = new Blob(chunks, {type: mimeType || 'audio/webm'});
+          const audioUrl = URL.createObjectURL(blob);
+          uiBox.innerHTML = '<audio controls src="'+audioUrl+'" style="width:100%;margin-bottom:8px;"></audio>'
+            + '<div class="row-actions"><button data-record-again="'+itemId+'" class="btn btn-outline" style="font-size:12px;">🔄 إعادة</button>'
+            + '<button data-record-send="'+itemId+'" class="btn btn-primary" style="font-size:12px;">📤 إرسال</button></div>';
+
+          uiBox.querySelector('[data-record-again]').addEventListener('click', ()=>{ render(); });
+          uiBox.querySelector('[data-record-send]').addEventListener('click', async ()=>{
+            const reader = new FileReader();
+            reader.onload = async ()=>{
+              const s = resolveProfileEntity(currentStudentId);
+              const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
+              const it = track?.items?.find(x=>x.id===itemId);
+              if(it){
+                it.pendingAudio = reader.result;
+                const ok = await saveTasmeeRaw();
+                toastSave(ok, '📤 تم إرسال التسجيل للمعلم');
+              }
+              render();
+            };
+            reader.readAsDataURL(blob);
+          });
+        };
+        recorder.start();
+      } catch(e){
+        uiBox.innerHTML = '<div style="color:var(--danger);font-size:12.5px;">تعذّر الوصول للميكروفون. تأكد من إعطاء الإذن المطلوب.</div>';
+      }
+    });
+  });
+}
+
+// ========== صفحة تقييم مدير النظام لتسميعات الطالب التجريبي (صوت مؤقت يُحذف بعد التقييم) ==========
+function renderTrialAdminEvaluationPage(){
+  const s = resolveProfileEntity(currentStudentId);
+  if(!s){ currentView='list'; return renderListView(); }
+  const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
+  if(!track){ currentView='tasmeeTracksHome'; return renderTasmeeTracksHome(); }
+
+  const items = track.items || [];
+  const rows = items.map(it=>{
+    const live = getLiveRating(s.id, it.label);
+    const rating = live!=null ? live : (it.rating||0);
+    const hasAudio = !!it.pendingAudio;
+    return '<div class="record-card" style="padding:10px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+      + '<span style="font-weight:bold;color:var(--teal-dark);">'+escapeHtml(it.label)+'</span>'
+      + '<span style="font-size:11.5px;color:var(--muted);">'+(rating?RATING_LABELS[rating]:'لم يُقيَّم')+'</span>'
+      + '</div>'
+      + (hasAudio
+          ? '<audio controls src="'+it.pendingAudio+'" style="width:100%;margin-top:8px;"></audio>'
+            + '<div class="row-actions" style="margin-top:8px;"><button data-open-trial-item="'+it.id+'" class="btn btn-gold" style="width:100%;">⭐ استمع وقيّم الآن</button></div>'
+          : '<div class="small-muted" style="margin-top:6px;">لا يوجد تسجيل بانتظار التقييم حاليًا.</div>')
+      + '</div>';
+  }).join('');
+
+  const openItem = window.__openTasmeeItem ? items.find(it=>it.id===window.__openTasmeeItem) : null;
+  const popup = openItem ? renderTasmeeItemPopup(openItem) : '';
+
+  return '<span class="back-link" data-go="tasmeeTracksHome">← رجوع لمسارات الطالب</span>'
+    + '<div class="card"><h2 style="margin:0;">🎧 تقييم تسميع — '+escapeHtml(s.name)+'</h2>'
+    +   '<div class="small-muted">'+escapeHtml(track.amount||'')+'</div></div>'
+    + rows
+    + popup;
+}
+function bindTrialAdminEvaluationPage(){
+  // إعادة استخدام كل معالجات النجوم/عدد الأخطاء/الحفظ الموجودة أصلًا في bindTasmeeHome دون أي تكرار للكود
+  bindTasmeeHome();
+  document.querySelectorAll('[data-open-trial-item]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      window.__openTasmeeItem = el.getAttribute('data-open-trial-item');
+      render();
+    });
+  });
+  // تنظيف تلقائي: أي عنصر أصبح له تقييم فعلي الآن ولا يزال يحمل تسجيلاً صوتيًا مؤقتًا، يُحذف صوته من قاعدة البيانات فورًا
+  const s = resolveProfileEntity(currentStudentId);
+  const track = s && tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
+  if(track){
+    let changed = false;
+    (track.items||[]).forEach(it=>{
+      const live = getLiveRating(s.id, it.label);
+      const rating = live!=null ? live : (it.rating||0);
+      if(it.pendingAudio && rating>0){ delete it.pendingAudio; changed = true; }
+    });
+    if(changed){ saveTasmeeRaw(); }
+  }
+}
+
+// ========== قائمة الطلاب التجريبيين (لمدير النظام فقط) ==========
+function renderTrialStudentsList(){
+  const nav = renderNavBar('adminHome');
+  if(!canManageTrialStudents()){
+    return nav + '<div class="card"><div class="empty">هذا القسم متاح لمدير النظام فقط.</div></div>';
+  }
+  const rows = trialStudents.length ? trialStudents.slice().sort((a,b)=>a.name.localeCompare(b.name,'ar')).map(t=>{
+    const pendingCount = tasmeeData.filter(tr=>tr.studentId===t.id).reduce((sum,tr)=>sum + (tr.items||[]).filter(it=>it.pendingAudio).length, 0);
+    return '<div data-trial-student-open="'+t.id+'" style="cursor:pointer;padding:10px 2px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">'
+      + '<div><div style="font-weight:bold;color:var(--teal-dark);">'+escapeHtml(t.name)+'</div>'
+      + '<div class="small-muted" style="font-size:11.5px;">'+escapeHtml(t.wilaya||'')+(t.phone?' • '+escapeHtml(t.phone):'')+'</div></div>'
+      + (pendingCount ? '<span class="pill" style="background:#fdecea;color:#a8463a;">🎤 '+pendingCount+'</span>' : '<span class="small-muted" style="font-size:11px;">›</span>')
+      + '</div>';
+  }).join('') : '<div class="empty">لا يوجد طلاب تجريبيون مسجَّلون بعد.</div>';
+
+  return nav + '<div class="card"><h2 style="margin-top:0;">🎓 الطلاب التجريبيون (خارج المركز)</h2>'+rows+'</div>';
+}
+function bindTrialStudentsList(){
+  bindCommon();
+  document.querySelectorAll('[data-trial-student-open]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      currentStudentId = el.getAttribute('data-trial-student-open');
+      currentCategory = 'hifz';
+      currentView = 'tasmeeTracksHome';
+      render();
+    });
+  });
 }
 
 function renderTasmeeHome(){
@@ -3774,7 +4116,8 @@ function renderTasmeeQuickForm(){
   optsHtml += '</optgroup>';
 
   const today = todayStr();
-  return '<span class="back-link" data-go="category">← رجوع</span>'
+  const backTarget = (currentUser?.role === 'trialStudent') ? 'home' : 'category';
+  return '<span class="back-link" data-go="'+backTarget+'">← رجوع</span>'
     + '<div class="card"><h2>🎯 مسار جديد — '+escapeHtml(s.name)+'</h2>'
     + '<h3 style="margin-bottom:6px;">مدة المسار</h3>'
     + '<div style="display:flex;gap:8px;">'
@@ -3813,7 +4156,7 @@ function bindTasmeeQuickForm(){
       const amountLabel = unitRange.length>1 ? ('من '+unitRange[0].label+' إلى '+unitRange[unitRange.length-1].label) : unitRange[0].label;
       const ok = await appendTrack({ id:uid(), studentId:currentStudentId, amount:amountLabel, durationDays: totalDays, startDate: dateFrom, teacher: currentUser?.name||'', items });
       toastSave(ok, 'تم حفظ المسار');
-      currentView = 'category';
+      currentView = (currentUser?.role === 'trialStudent') ? 'tasmeeTracksHome' : 'category';
       render();
     });
   }
@@ -7475,6 +7818,13 @@ try{
 loadCustomPins();
 loadCustomNames();
 loadStudentPins();
+
+try{
+  const urlParams = new URLSearchParams(location.search);
+  if(urlParams.get('trial') === '1'){
+    currentView = 'trialRegisterForm';
+  }
+}catch(e){}
 
 loadData();
 </script>
