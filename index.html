@@ -1772,6 +1772,9 @@ function render(){
   } else if(currentView === 'circlesHome'){
     app.innerHTML = renderCirclesHome();
     bindCirclesHome();
+  } else if(currentView === 'circlesDiagnostic'){
+    app.innerHTML = renderCirclesDiagnostic();
+    bindCommon();
   } else if(currentView === 'attendanceOverview'){
     app.innerHTML = renderAttendanceOverview();
     bindAttendanceOverview();
@@ -6426,9 +6429,35 @@ function renderCirclesHome(){
   const attendanceCard = '<div data-attendance-overview="1" style="cursor:pointer;border-radius:50%;width:150px;height:150px;margin:0 auto;background:var(--bg);border:3px solid var(--gold);box-shadow:0 3px 10px rgba(0,0,0,.12);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:10px;">'
     + '<div style="color:var(--gold);font-weight:bold;font-size:15px;">الحضور والغياب</div>'
     + '</div>';
+  const diagLink = canManageTrialStudents() ? '<div style="text-align:left;margin-top:14px;"><span class="back-link" data-go="circlesDiagnostic" style="font-size:12px;">🔍 تشخيص كل الحلقات (فحص شامل)</span></div>' : '';
   return nav
     + '<div class="card"><h2>الحلقات</h2>'
     + '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px 10px;">'+cards+attendanceCard+'</div>'
+    + diagLink
+    + '</div>';
+}
+// صفحة تشخيص شاملة (للمدير فقط): تعرض كل حلقة في كل مادة بتفاصيلها الكاملة، لاكتشاف أي حلقة مفقودة أو مدمجة خطأً بسبب دالة الدمج التلقائي
+function renderCirclesDiagnostic(){
+  const backBtn = '<span class="back-link" data-go="circlesHome">← رجوع للحلقات</span>';
+  const bySubject = {};
+  circlesData.forEach(c=>{ (bySubject[c.subject] = bySubject[c.subject]||[]).push(c); });
+  const rows = Object.keys(bySubject).sort().map(subjKey=>{
+    const subLabel = (getSubject(subjKey)||{}).label || subjKey;
+    const items = bySubject[subjKey].map(c=>{
+      const studentNames = (c.studentIds||[]).map(id=>{ const s=students.find(x=>x.id===id); return s?s.name:'(معرّف غير موجود: '+id+')'; });
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin:6px 0;font-size:12px;">'
+        + '<div style="font-weight:bold;">'+escapeHtml(c.topic)+'</div>'
+        + '<div class="small-muted">المعلم: '+escapeHtml(c.teacher||'')+' — المعرّف: '+escapeHtml(c.id)+'</div>'
+        + '<div class="small-muted">عدد الطلاب: '+studentNames.length+'</div>'
+        + '<div style="color:var(--teal-dark);word-break:break-word;">'+studentNames.map(escapeHtml).join('، ')+'</div>'
+        + '</div>';
+    }).join('');
+    return '<div style="margin-top:14px;"><h3 style="margin-bottom:4px;">'+escapeHtml(subLabel)+' ('+bySubject[subjKey].length+' حلقة)</h3>'+items+'</div>';
+  }).join('');
+  return backBtn
+    + '<div class="card"><h2>🔍 تشخيص شامل لكل الحلقات</h2>'
+    + '<p class="small-muted">هذا العرض يشمل كل حلقة موجودة فعليًا في قاعدة البيانات في كل المواد، بما فيها أي حلقة قد لا تظهر في الشاشة الرئيسية.</p>'
+    + rows
     + '</div>';
 }
 function bindCirclesHome(){
@@ -7894,6 +7923,7 @@ function bindCommon(){
 
       else if(go==='rolesHome'){ currentView='rolesHome'; showAddPersonPanel=false; }
       else if(go==='circlesHome'){ currentView='circlesHome'; window.__attFilterFrom=''; window.__attFilterTo=''; }
+      else if(go==='circlesDiagnostic'){ currentView='circlesDiagnostic'; }
       else if(go==='circleSubject'){ currentView='circleSubject'; }
       else if(go==='circleDetail'){ currentView='circleDetail'; }
       else if(go==='home'){ currentView='home'; }
