@@ -6108,6 +6108,8 @@ async function seedAbdullahAttendance(){
 async function dedupeCircles(){
   try{
     if(await storeGet('circles_dedup_v2')) return;
+    // نُثبِّت العلامة فورًا قبل أي دمج، حتى لو فشلت خطوة لاحقة، لمنع تكرار هذه العملية التدميرية المحتملة في كل فتحة قادمة للتطبيق
+    await storeSet('circles_dedup_v2','1');
     const latestC = await storeGet(CIRCLES_KEY);
     let all = latestC ? JSON.parse(latestC) : circlesData;
     const groups = {};
@@ -6140,7 +6142,6 @@ async function dedupeCircles(){
       circleAttendanceData = allAtt;
       await storeSet(CIRCLE_ATTENDANCE_KEY, JSON.stringify(allAtt));
     }
-    await storeSet('circles_dedup_v2','1');
   }catch(e){}
 }
 
@@ -6148,6 +6149,7 @@ async function dedupeCircles(){
 async function seedFiqhCircles(){
   try{
     if(await storeGet('fiqh_circles_seeded_v3')) return;
+    await storeSet('fiqh_circles_seeded_v3','1'); // تثبيت العلامة فورًا وقائيًا
     const groups = [
       { topic:'تلقين الصبيان — المستوى ١', teacher:'أسعد بن عبيد الحبسي', names:["خالد بن بدر بن سليمان البراشدي","عمر بن عيسى بن محمد السيابي","عبدالحكيم بن عامر بن سالم الشكيري","حسين بن علي بن سيف الحارثي","معاذ بن أحمد بن هلال بن راشد المسكري","زكريا بن يحيى بن سليم الرحبي","أحمد بن إبراهيم بن محمد النظيري","الأزهر بن راشد بن سعيد العويسي","عامر بن محمد بن عامر المسعودي","عبدالملك بن أحمد بن مالك المسكري","عمران بن سعيد بن مالك المسكري","تميم بن حمد بن علي الكيومي","عيسى بن هلال بن مالك المسكري","عبدالودود بن محمد بن راشد الغماري","إبراهيم بن زاهر بن محمد الهاشمي","عبدالله بن سعيد بن عبدالله الصقري","محمد بن يحيى بن حميد السليمي"] },
       { topic:'تلقين الصبيان — المستوى ٢', teacher:'حمد بن حمود الطوقي', names:["محمد بن عامر بن محمد البطاشي","عبدالرحمن بن محمد بن سالم الرواحي","محمد بن محبوب بن يعقوب البراشدي","خالد بن علي بن خليفة التوبي","محمد بن راشد بن علي الحارثي","وائل بن بدر بن سعيد الحراصي","محمد بن أحمد بن محمد الريامي","إسحاق بن إبراهيم بن سيف الشيباني","حمزة بن عامر بن محمد الحجري","أحمد بن حارث بن أحمد السيابي","عيسى بن أحمد بن عبدالله الغافري"] },
@@ -6162,12 +6164,15 @@ async function seedFiqhCircles(){
       circlesData.push({id:uid(), subject:'fiqh', topic:g.topic, teacher:g.teacher, studentIds:ids});
     });
     await saveCirclesRaw();
-    await storeSet('fiqh_circles_seeded_v3','1');
+    
   }catch(e){}
 }
 async function seedNahwCircle(){
   try{
     if(await storeGet('nahw_circle_seeded_v5')) return;
+    // نُثبِّت العلامة فورًا قبل أي حذف أو إعادة إنشاء، لضمان أن هذه العملية تُنفَّذ مرة واحدة فقط للأبد
+    // ولا تحذف مجددًا أي تعديلات لاحقة (كإضافة طلاب جدد) أُجريت على هذه الحلقة بعد إنشائها الأول
+    await storeSet('nahw_circle_seeded_v5','1');
     const NEW_TOPIC = 'كتاب القواعد ٢ — المستوى ٢';
     // إزالة فقط النسخ القديمة غير الدقيقة من *نفس* هذه الحلقة (وليس كل حلقات النحو)
     const OLD_TOPICS = ['المستوى ٢ — كتاب القواعد في النحو والإعراب (٢)', NEW_TOPIC];
@@ -6182,13 +6187,13 @@ async function seedNahwCircle(){
     const ids = names.map(n=>{const st=students.find(x=>x.name.trim()===n.trim());return st?st.id:null;}).filter(Boolean);
     circlesData.push({id:uid(), subject:'nahw', topic:NEW_TOPIC, teacher:'حمود بن عبدالله السمري', studentIds:ids});
     await saveCirclesRaw();
-    await storeSet('nahw_circle_seeded_v5','1');
   }catch(e){}
 }
 
 async function seedNahwCircles2(){
   try{
     if(await storeGet('nahw_circles2_seeded_v1')) return;
+    await storeSet('nahw_circles2_seeded_v1','1'); // تثبيت العلامة فورًا وقائيًا
     const groups = [
       { topic:'كتاب القواعد ٢ — القسم الأول (أ)', teacher:'يوسف بن سليمان العيسري', names:["بدر بن ناصر بن ساعد السعدي","الحسن بن علي بن سعيد البوسعيدي","الحواري بن عبدالله بن محمد المسروري","حكيم بن أحمد بن ناصر الحارثي","حمد بن خليفة بن حمد الهدابي","سالم بن راشد بن سالم المسروري","سعيد بن ناصر بن سعيد المصلحي","عبدالله بن علي بن محمد الوهيبي","عمار بن عبدالرحمن بن علي السيابي","الفضل بن علي بن سعود الحارثي","محمد بن علي بن سالم السيابي","محمد بن سليمان بن عبدالله المسروري"] },
       { topic:'كتاب القواعد ٢ — القسم الأول (ب)', teacher:'صالح بن ناصر المعمري', names:["إبراهيم بن زاهر بن محمد الهاشمي","أحمد بن إبراهيم بن محمد النظيري","الأزهر بن راشد بن سعيد العويسي","الوارث بن أحمد بن سعيد المسكري","تميم بن حمد بن علي الكيومي","حسين بن علي بن سيف الحارثي","حمود بن حمد بن حمود الطوقي","خالد بن بدر بن سليمان البراشدي","زكريا بن يحيى بن سليم الرحبي","عامر بن محمد بن عامر المسعودي","عبدالحكيم بن عامر بن سالم الشكيري","عبدالله بن سعيد بن عبدالله الصقري","عبدالودود بن محمد بن راشد الغماري","عبدالملك بن أحمد بن مالك المسكري","عمر بن سعيد بن عبدالله اليزيدي","عمر بن عيسى بن محمد السيابي","عمران بن سعيد بن مالك المسكري","عيسى بن هلال بن مالك المسكري","محمد بن سالم بن محمد الرحبي","محمد بن عبدالله بن سعيد المسكري","محمد بن يحيى بن حميد السليمي","حمد الرحبي","ناصر بن عامر بن ناصر العويسي","يونس بن خلفان بن محمد العيسري","يونس بن ربيع بن محمد الرحبي"] },
@@ -6200,13 +6205,14 @@ async function seedNahwCircles2(){
       circlesData.push({id:uid(), subject:'nahw', topic:g.topic, teacher:g.teacher, studentIds:ids});
     });
     await saveCirclesRaw();
-    await storeSet('nahw_circles2_seeded_v1','1');
+    
   }catch(e){}
 }
 
 async function seedAqeedaCircles(){
   try{
     if(await storeGet('aqeeda_circles_seeded_v1')) return;
+    await storeSet('aqeeda_circles_seeded_v1','1'); // تثبيت العلامة فورًا وقائيًا
     const groups = [
       { topic:'كتاب عقيدتي — حلقة الأستاذ عبدالله العامري', teacher:'عبدالله العامري', names:["إبراهيم بن زاهر بن محمد الهاشمي","عمر بن عيسى بن محمد السيابي","زكريا بن يحيى بن سليم الرحبي","معاذ بن أحمد بن هلال بن راشد المسكري","عمران بن سعيد بن مالك المسكري","ناصر بن عامر بن ناصر العويسي","حسين بن علي بن سيف الحارثي","عبدالودود بن محمد بن راشد الغماري","عيسى بن هلال بن مالك المسكري","يونس بن ربيع بن محمد الرحبي","محمد بن يحيى بن حميد السليمي","عبدالملك بن أحمد بن مالك المسكري","يونس بن خلفان بن محمد العيسري"] },
       { topic:'كتاب عقيدتي — حلقة الأستاذ سالم المسكري', teacher:'سالم المسكري', names:["الأزهر بن راشد بن سعيد العويسي","تميم بن حمد بن علي الكيومي","خالد بن بدر بن سليمان البراشدي","أحمد بن إبراهيم بن محمد النظيري","عمر بن سعيد بن عبدالله اليزيدي","محمد بن عبدالله بن سعيد المسكري","الوارث بن أحمد بن سعيد المسكري","حمود بن حمد بن حمود الطوقي","عبدالله بن سعيد بن عبدالله الصقري","عبدالحكيم بن عامر بن سالم الشكيري","محمد بن سالم بن محمد الرحبي","عامر بن محمد بن عامر المسعودي"] },
@@ -6221,13 +6227,14 @@ async function seedAqeedaCircles(){
       circlesData.push({id:uid(), subject:'aqeeda', topic:g.topic, teacher:g.teacher, studentIds:ids});
     });
     await saveCirclesRaw();
-    await storeSet('aqeeda_circles_seeded_v1','1');
+    
   }catch(e){}
 }
 
 async function seedTajweedCircles(){
   try{
     if(await storeGet('tajweed_circles_seeded_v1')) return;
+    await storeSet('tajweed_circles_seeded_v1','1'); // تثبيت العلامة فورًا وقائيًا
     const groups = [
       { topic:'التجويد — المستوى الأول', teacher:'سيف بن أحمد بن محمد المسروري', names:["إبراهيم بن زاهر بن محمد الهاشمي","الوارث بن أحمد بن سعيد المسكري","حسين بن علي بن سيف الحارثي","خالد بن بدر بن سليمان البراشدي","عامر بن محمد بن عامر المسعودي","عبدالملك بن أحمد بن مالك المسكري","عبدالودود بن محمد بن راشد الغماري","عمر بن سعيد بن عبدالله اليزيدي","عيسى بن هلال بن مالك المسكري","محمد بن سالم بن محمد الرحبي","محمد بن عبدالله بن سعيد المسكري","يونس بن خلفان بن محمد العيسري"] },
       { topic:'التجويد — المستوى الثاني (أ)', teacher:'حمزة بن عبدالله بن خميس الغيثي', names:["أحمد بن حارث بن أحمد السيابي","حمزة بن عامر بن محمد الحجري","خالد بن علي بن خليفة التوبي","سليمان بن داود بن سليمان المسكري","علي بن سعيد بن سالم الوهيبي","عمار بن مازن بن حمود الطوقي","محمد بن أحمد بن محمد الريامي","محمد بن راشد بن علي الحارثي"] },
@@ -6241,7 +6248,7 @@ async function seedTajweedCircles(){
       circlesData.push({id:uid(), subject:'tajweed', topic:g.topic, teacher:g.teacher, studentIds:ids});
     });
     await saveCirclesRaw();
-    await storeSet('tajweed_circles_seeded_v1','1');
+    
   }catch(e){}
 }
 
@@ -6249,6 +6256,7 @@ async function seedTajweedCircles(){
 async function seedFajrGroupCircles(){
   try{
     if(await storeGet('fajr_group_circles_seeded_v1')) return;
+    await storeSet('fajr_group_circles_seeded_v1','1'); // تثبيت العلامة فورًا وقائيًا
     GROUPS_SEED.forEach(g=>{
       const topic = g.name + ' — مجموعة ' + g.number;
       if(circlesData.some(c=>c.subject==='fajr' && c.topic===topic)) return;
@@ -6257,7 +6265,7 @@ async function seedFajrGroupCircles(){
       circlesData.push({id:uid(), subject:'fajr', topic, teacher:g.supervisor||'', studentIds:ids});
     });
     await saveCirclesRaw();
-    await storeSet('fajr_group_circles_seeded_v1','1');
+    
   }catch(e){}
 }
 
