@@ -3846,17 +3846,34 @@ function bindTrialAdminEvaluationPage(){
     const openItem0 = track0 && track0.items.find(it=>it.id===window.__openTasmeeItem);
     if(openItem0 && inferItemSurahAyah(openItem0)){ bindInteractiveTasmeeReview(openItem0); }
   }
-  // تنظيف تلقائي: أي عنصر أصبح له تقييم فعلي الآن ولا يزال يحمل تسجيلاً صوتيًا مؤقتًا، يُحذف صوته من قاعدة البيانات فورًا
+  // تنظيف تلقائي (آمن): أي عنصر أصبح له تقييم فعلي الآن ولا يزال يحمل تسجيلاً صوتيًا مؤقتًا، يُحذف صوته من قاعدة البيانات
+  // يُنفَّذ بنمط "جلب أحدث نسخة ثم حفظ" حصريًا — لا نكتب أبدًا نسخة tasmeeData المحلية خامة، لأن ذلك قد يمحو
+  // أي تسجيلات أو تقييمات أضافها طالب آخر أو جهاز آخر بين لحظة تحميل هذه الجلسة والآن (خطأ كان قائمًا سابقًا هنا)
   const s = resolveProfileEntity(currentStudentId);
   const track = s && tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===s.id);
   if(track){
-    let changed = false;
+    const staleItemIds = [];
     (track.items||[]).forEach(it=>{
       const live = getLiveRating(s.id, it.label);
       const rating = live!=null ? live : (it.rating||0);
-      if(it.pendingAudio && rating>0){ delete it.pendingAudio; changed = true; }
+      if(it.pendingAudio && rating>0){ delete it.pendingAudio; staleItemIds.push(it.id); }
     });
-    if(changed){ saveTasmeeRaw(); }
+    if(staleItemIds.length){
+      (async ()=>{
+        try{
+          const latest = await storeGet(TASMEE_KEY);
+          const all = latest ? JSON.parse(latest) : tasmeeData.slice();
+          const latestTrack = all.find(t=>t.id===track.id);
+          if(latestTrack){
+            (latestTrack.items||[]).forEach(it2=>{
+              if(staleItemIds.includes(it2.id)) delete it2.pendingAudio;
+            });
+          }
+          tasmeeData = all;
+          await storeSet(TASMEE_KEY, JSON.stringify(all));
+        }catch(e){}
+      })();
+    }
   }
 }
 
@@ -4274,10 +4291,17 @@ function bindTasmeeHome(){
       const track = tasmeeData.find(t=>t.id===window.__currentTasmeeTrackId && t.studentId===currentStudentId);
       const item = track && track.items.find(it=>it.id===window.__openTasmeeItem);
       if(!item){ return; }
-      item.reviewNotes = document.getElementById('tasmeeReviewInput').value.trim();
-      if(item.rating>0 && !item.doneDate) item.doneDate = todayStr();
-      if(item.rating===0) item.doneDate = null;
-      const ok = await saveTasmeeRaw();
+      const reviewNotes = document.getElementById('tasmeeReviewInput').value.trim();
+      const finalRating = item.rating;
+      const finalDoneDate = (finalRating>0) ? (item.doneDate || todayStr()) : null;
+      // كتابة آمنة: نجلب أحدث نسخة فعلية من قاعدة البيانات أولًا قبل الحفظ، لمنع محو أي بيانات أضافها جهاز آخر في نفس الفترة
+      const ok = await safeUpdateTasmeeItem(window.__currentTasmeeTrackId, item.id, (it)=>{
+        it.reviewNotes = reviewNotes;
+        it.rating = finalRating;
+        it.doneDate = finalDoneDate;
+      });
+      item.reviewNotes = reviewNotes;
+      item.doneDate = finalDoneDate;
       toastSave(ok, 'تم الحفظ');
       await syncLinkedTaskCompletion(currentStudentId);
       window.__openTasmeeItem = null;
