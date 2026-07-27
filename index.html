@@ -3440,6 +3440,10 @@ function renderTrialRecordingPage(){
         const wordsHtml = words.map(w=>{
           const err = (it.wordErrors||{})[w.key];
           if(!err) return '<span style="padding:5px 6px;">'+escapeHtml(w.text)+'</span>';
+          if(err.type==='qafz'){
+            return '<span data-student-word-fix="'+it.id+'|'+w.key+'" style="cursor:pointer;padding:5px 6px;margin:2px;border-radius:6px;background:#dce8fc;box-shadow:0 0 0 2px #7ba7e0;">'+escapeHtml(w.text)+' 🔊</span>'
+              + ' <span style="background:#dce8fc;color:#2a5ba8;font-size:12px;font-weight:bold;padding:3px 8px;border-radius:9px;">⏭ لم تُقرأ آية '+err.skippedAyah+'</span>';
+          }
           const bg = err.type==='tashkeel' ? '#fde9c8' : '#fbdada';
           return '<span data-student-word-fix="'+it.id+'|'+w.key+'" style="cursor:pointer;padding:5px 6px;margin:2px;border-radius:6px;background:'+bg+';box-shadow:0 0 0 2px rgba(0,0,0,.15);">'+escapeHtml(w.text)+' 🔊</span>';
         }).join(' ');
@@ -3476,6 +3480,8 @@ function bindTrialRecordingPage(){
       let textToSay = '';
       if(err.type === 'tashkeel'){
         textToSay = err.correct;
+      } else if(err.type === 'qafz'){
+        textToSay = 'لم تقرأ آية ' + err.skippedAyah;
       } else {
         textToSay = 'قلت ' + err.said + '، والصحيح ' + err.correct;
       }
@@ -3581,7 +3587,7 @@ function renderTrialAdminEvaluationPage(){
       + '<span style="font-size:11.5px;color:var(--muted);">'+(rating?RATING_LABELS[rating]:'لم يُقيَّم')+'</span>'
       + '</div>'
       + (hasAudio
-          ? '<audio controls src="'+it.pendingAudio+'" style="width:100%;margin-top:8px;"></audio>'
+          ? '<audio id="pendingAudio_'+it.id+'" controls src="'+it.pendingAudio+'" style="width:100%;margin-top:8px;"></audio>'
             + '<div class="row-actions" style="margin-top:8px;"><button data-open-trial-item="'+it.id+'" class="btn btn-gold" style="width:100%;">⭐ استمع وقيّم الآن</button></div>'
           : '<div class="small-muted" style="margin-top:6px;">لا يوجد تسجيل بانتظار التقييم حاليًا.</div>')
       + '</div>';
@@ -3608,14 +3614,18 @@ function renderInteractiveTasmeeReview(item){
     let style = 'cursor:pointer;padding:5px 6px;margin:1px;border-radius:6px;display:inline-block;background:#f4f6f5;transition:background .15s;';
     if(err){
       style = 'cursor:pointer;padding:5px 6px;margin:1px;border-radius:6px;display:inline-block;';
-      style += err.type==='tashkeel' ? 'background:#fde9c8;box-shadow:0 0 0 2px #e0b25a;' : 'background:#fbdada;text-decoration:line-through;box-shadow:0 0 0 2px #d98a8a;';
+      if(err.type==='tashkeel') style += 'background:#fde9c8;box-shadow:0 0 0 2px #e0b25a;';
+      else if(err.type==='tabdeel') style += 'background:#fbdada;text-decoration:line-through;box-shadow:0 0 0 2px #d98a8a;';
+      else if(err.type==='qafz') style += 'background:#dce8fc;box-shadow:0 0 0 2px #7ba7e0;';
     }
-    const wordSpan = '<span data-word-key="'+w.key+'" data-word-text="'+escapeAttr(w.text)+'" style="'+style+'">'+escapeHtml(w.text)+'</span>';
+    const qafzBadge = (err && err.type==='qafz') ? ' <span style="background:#dce8fc;color:#2a5ba8;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:8px;">⏭ لم تُقرأ آية '+err.skippedAyah+'</span>' : '';
+    const wordSpan = '<span data-word-key="'+w.key+'" data-word-text="'+escapeAttr(w.text)+'" data-word-ayah="'+w.ayah+'" style="'+style+'">'+escapeHtml(w.text)+'</span>' + qafzBadge;
     if(editingKey !== w.key) return wordSpan;
     // خيارات التحديد تظهر مضمَّنة مباشرة بعد الكلمة نفسها
     const inlineChoice = '<span class="word-choice-inline" style="display:inline-flex;gap:5px;background:var(--teal-pale);border-radius:8px;padding:5px 6px;margin:2px 1px;vertical-align:middle;direction:rtl;">'
       + '<button data-mark-type="tashkeel" data-key="'+w.key+'" class="btn btn-outline" style="font-size:11px;padding:4px 8px;">تشكيل</button>'
       + '<button data-mark-type="tabdeel" data-key="'+w.key+'" class="btn btn-outline" style="font-size:11px;padding:4px 8px;">تبديل</button>'
+      + '<button data-mark-type="qafz" data-key="'+w.key+'" class="btn btn-outline" style="font-size:11px;padding:4px 8px;">قفز</button>'
       + (err ? '<button data-mark-clear-inline="'+w.key+'" class="btn btn-outline" style="font-size:11px;padding:4px 8px;color:var(--danger);">إزالة</button>' : '')
       + '</span>';
     const tabdeelInput = (window.__tabdeelActiveKey === w.key)
@@ -3636,9 +3646,28 @@ function renderInteractiveTasmeeReview(item){
     + '<div class="row-actions" style="margin-top:14px;"><button id="finalizeInteractiveEvalBtn" class="btn btn-primary" style="width:100%;">✅ تقييم</button></div>'
     + '</div>';
 }
+// يحفظ موضع تشغيل صوت الطالب الحالي (الزمن وحالة التشغيل) قبل أي إعادة عرض تُفقِد عنصر <audio> الحالي
+function captureAudioResumeState(item){
+  const audioEl = document.getElementById('pendingAudio_'+item.id);
+  if(audioEl){
+    window.__audioResumeState = { itemId: item.id, time: audioEl.currentTime, playing: !audioEl.paused };
+  }
+}
+// يستعيد موضع التشغيل المحفوظ على عنصر <audio> الجديد بعد إعادة العرض، ليكمل من حيث توقّف بدل البداية
+function restoreAudioResumeState(item){
+  const st = window.__audioResumeState;
+  if(!st || st.itemId !== item.id) return;
+  const audioEl = document.getElementById('pendingAudio_'+item.id);
+  if(!audioEl) return;
+  audioEl.currentTime = st.time;
+  if(st.playing) audioEl.play().catch(()=>{});
+}
+
 function bindInteractiveTasmeeReview(item){
+  restoreAudioResumeState(item);
   document.querySelectorAll('#ayahInteractiveText [data-word-key]').forEach(el=>{
     el.addEventListener('click', ()=>{
+      captureAudioResumeState(item);
       const key = el.getAttribute('data-word-key');
       // النقر على نفس الكلمة مرة أخرى أثناء ظهور خياراتها يُغلقها (تبديل حالة)
       if(window.__editingWordKey === key){
@@ -3654,6 +3683,7 @@ function bindInteractiveTasmeeReview(item){
 
   document.querySelectorAll('[data-mark-type="tashkeel"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      captureAudioResumeState(item);
       const key = btn.getAttribute('data-key');
       const wordEl = document.querySelector('[data-word-key="'+key+'"]');
       const wordText = wordEl ? wordEl.getAttribute('data-word-text') : '';
@@ -3666,12 +3696,27 @@ function bindInteractiveTasmeeReview(item){
   });
   document.querySelectorAll('[data-mark-type="tabdeel"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      captureAudioResumeState(item);
       window.__tabdeelActiveKey = btn.getAttribute('data-key');
+      render();
+    });
+  });
+  document.querySelectorAll('[data-mark-type="qafz"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      captureAudioResumeState(item);
+      const key = btn.getAttribute('data-key');
+      const wordEl = document.querySelector('[data-word-key="'+key+'"]');
+      const ayahOfWord = wordEl ? parseInt(wordEl.getAttribute('data-word-ayah'), 10) : null;
+      item.wordErrors = item.wordErrors || {};
+      item.wordErrors[key] = { type:'qafz', skippedAyah: (ayahOfWord!=null ? ayahOfWord+1 : null) };
+      window.__editingWordKey = null;
+      window.__tabdeelActiveKey = null;
       render();
     });
   });
   document.querySelectorAll('[data-mark-clear-inline]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
+      captureAudioResumeState(item);
       const key = btn.getAttribute('data-mark-clear-inline');
       if(item.wordErrors) delete item.wordErrors[key];
       window.__editingWordKey = null;
@@ -3682,6 +3727,7 @@ function bindInteractiveTasmeeReview(item){
   const tabdeelConfirmBtn = document.getElementById('tabdeelConfirmInlineBtn');
   if(tabdeelConfirmBtn){
     tabdeelConfirmBtn.addEventListener('click', ()=>{
+      captureAudioResumeState(item);
       const key = tabdeelConfirmBtn.getAttribute('data-key');
       const said = document.getElementById('tabdeelSaidInline').value.trim();
       if(!said) return;
