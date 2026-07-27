@@ -1720,6 +1720,7 @@ function render(){
   if(currentView === 'trialRegisterSuccess'){
     document.querySelector('header').style.display = 'flex';
     app.innerHTML = renderTrialRegisterSuccess();
+    bindTrialRegisterSuccess();
     return;
   }
   document.querySelector('header').style.display = 'flex';
@@ -2134,6 +2135,7 @@ function bindTrialRegisterForm(){
     const ok = await saveTrialStudents();
     if(ok){
       window.__trialRegSuccessUsername = username;
+      window.__trialRegSuccessId = trialStudents.find(t=>t.username.trim()===username)?.id || null;
       currentView = 'trialRegisterSuccess';
       render();
     } else {
@@ -2149,12 +2151,23 @@ function renderTrialRegisterSuccess(){
         <div style="font-size:40px;">✅</div>
         <h2 style="border:none;padding:0;color:var(--teal-dark);">تم التسجيل بنجاح</h2>
         <p class="small-muted">يمكنك الآن الدخول للتطبيق باسم الدخول ورقم العبور اللذين اخترتهما:</p>
-        <div style="background:var(--teal-pale);border-radius:10px;padding:12px;margin-top:10px;font-weight:bold;color:var(--teal-dark);">
+        <div data-trial-login-now="1" style="cursor:pointer;background:var(--teal-pale);border-radius:10px;padding:12px;margin-top:10px;font-weight:bold;color:var(--teal-dark);border:2px solid var(--gold);">
           اسم الدخول: ${escapeHtml(username)}
         </div>
+        <p class="small-muted" style="margin-top:8px;">اضغط هنا للدخول مباشرة الآن</p>
       </div>
     </div>
   `;
+}
+function bindTrialRegisterSuccess(){
+  const btn = document.querySelector('[data-trial-login-now]');
+  if(!btn) return;
+  btn.addEventListener('click', ()=>{
+    const trial = trialStudents.find(t=>t.id===window.__trialRegSuccessId) || trialStudents.find(t=>t.username.trim()===window.__trialRegSuccessUsername);
+    if(!trial) return;
+    currentUser = { name: trial.name, role:'trialStudent', trialStudentId: trial.id };
+    finishLogin();
+  });
 }
 
 // يبحث عن الاسم (مطابقة تامة بعد إزالة الفراغات الزائدة) عبر القوائم الأربع بالترتيب:
@@ -2227,7 +2240,8 @@ function finishLogin(){
       sessionStorage.setItem('current_user', JSON.stringify(currentUser));
       sessionStorage.setItem('current_domain', currentDomain);
     }catch(e){}
-    document.getElementById('loginError').style.display='none';
+    const errEl = document.getElementById('loginError');
+    if(errEl) errEl.style.display='none';
     currentView = 'home';
     render();
 }
