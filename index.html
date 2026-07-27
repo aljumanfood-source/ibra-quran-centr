@@ -1975,7 +1975,7 @@ function renderAdminHome(){
         ${canManageTrialStudents() ? `
         <div class="home-dial-item" data-home-go="trialStudentsList">
           <div class="home-dial-circle">🎓</div>
-          <div class="home-dial-label">الطلاب التجريبيون</div>
+          <div class="home-dial-label">طلاب من خارج المركز</div>
         </div>` : ''}
       </div>
     </div>
@@ -3257,11 +3257,51 @@ function renderAchievementsReport(){
 function renderTasmeeTracksHome(){
   const s = resolveProfileEntity(currentStudentId);
   if(!s){ currentView='list'; return renderListView(); }
+  const isTrial = trialStudents.some(x=>x.id===currentStudentId);
   const tbBack = (currentUser?.role === 'trialStudent') ? 'home'
-    : trialStudents.some(x=>x.id===currentStudentId) ? 'trialStudentsList'
+    : isTrial ? 'trialStudentsList'
     : 'category';
   const tracks = getStudentTracks(s.id);
   const trialInfo0 = trialStudents.find(t=>t.id===s.id);
+
+  // صفحة موحّدة واحدة لطلاب من خارج المركز: مسار لم يُنجز (أسطر) + تقرير الإنجاز (أسطر)، بلا تنقل بين صفحات فرعية
+  if(isTrial && currentUser?.role !== 'trialStudent'){
+    const allItems = [];
+    tracks.forEach(t=>{
+      (t.items||[]).forEach(it=>{
+        allItems.push({ trackId:t.id, item:it });
+      });
+    });
+    const pending = allItems.filter(x=>!(x.item.rating>0));
+    const done = allItems.filter(x=>x.item.rating>0);
+
+    const pendingRows = pending.length ? pending.map(x=>{
+      const it = x.item;
+      return '<div data-open-item="'+x.trackId+'|'+it.id+'" style="cursor:pointer;padding:12px 14px;border-radius:10px;background:#fff;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">'
+        + '<span style="font-weight:bold;color:var(--teal-dark);">'+escapeHtml(it.label||'')+(it.detail?' — '+escapeHtml(it.detail):'')+'</span>'
+        + (it.pendingAudio ? '<span style="background:#fde9c8;color:#8a5a1a;font-weight:bold;font-size:12px;padding:4px 10px;border-radius:10px;">🎤 بانتظار التقييم</span>' : '<span class="small-muted" style="font-size:12px;">لم يُرسَل بعد</span>')
+        + '</div>';
+    }).join('') : '<div class="empty">لا يوجد أي مسار غير منجز حاليًا.</div>';
+
+    const doneRows = done.length ? done.map(x=>{
+      const it = x.item;
+      return '<div style="padding:12px 14px;border-radius:10px;background:#eafaf1;border:1px solid #b7e6c9;display:flex;justify-content:space-between;align-items:center;">'
+        + '<span style="font-weight:bold;color:var(--teal-dark);">'+escapeHtml(it.label||'')+(it.detail?' — '+escapeHtml(it.detail):'')+'</span>'
+        + '<span style="color:#1a8a5a;font-weight:bold;font-size:13px;">'+(RATING_LABELS[it.rating]||'')+(it.doneDate?' • '+fmtDate(it.doneDate):'')+'</span>'
+        + '</div>';
+    }).join('') : '<div class="empty">لا يوجد أي إنجاز مكتمل بعد.</div>';
+
+    return '<span class="back-link" data-go="'+tbBack+'">← رجوع</span>'
+      + '<div class="card">'
+      + '<h2 style="margin-top:0;text-align:center;">📄 '+escapeHtml(s.name)+'</h2>'
+      + (trialInfo0 ? '<div class="small-muted" style="text-align:center;margin-top:-8px;margin-bottom:10px;">'+escapeHtml(trialInfo0.wilaya||'')+(trialInfo0.phone?' • '+escapeHtml(trialInfo0.phone):'')+'</div>' : '')
+      + '<h3 style="margin-bottom:6px;">مسار لم يُنجز</h3>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">'+pendingRows+'</div>'
+      + '<h3 style="margin-bottom:6px;">تقرير الإنجاز</h3>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;">'+doneRows+'</div>'
+      + '</div>';
+  }
+
   if(!tracks.length){
     return '<span class="back-link" data-go="'+tbBack+'">← رجوع</span>'
       + '<div class="card"><h2 style="margin-top:0;">📄 التقرير</h2>'
@@ -3294,6 +3334,18 @@ function renderTasmeeTracksHome(){
 }
 function bindTasmeeTracksHome(){
   bindCommon();
+  document.querySelectorAll('[data-open-item]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const [trackId, itemId] = el.getAttribute('data-open-item').split('|');
+      window.__currentTasmeeTrackId = trackId;
+      window.__tasmeePrintMode = false;
+      window.__openTasmeeItem = itemId;
+      window.__tasmeeReportImageUrl = null;
+      window.__tasmeeReportBlob = null;
+      currentView = 'trialAdminEvaluationPage';
+      render();
+    });
+  });
   document.querySelectorAll('[data-track-open]').forEach(el=>{
     el.addEventListener('click', ()=>{
       window.__currentTasmeeTrackId = el.getAttribute('data-track-open');
@@ -3699,7 +3751,7 @@ function renderTrialStudentsList(){
       + '</div>';
   }).join('') : '<div class="empty">لا يوجد طلاب تجريبيون مسجَّلون بعد.</div>';
 
-  return nav + '<div class="card"><h2 style="margin-top:0;">🎓 الطلاب التجريبيون (خارج المركز)</h2>'+rows+'</div>';
+  return nav + '<div class="card"><h2 style="margin-top:0;">🎓 طلاب من خارج المركز</h2>'+rows+'</div>';
 }
 function bindTrialStudentsList(){
   bindCommon();
