@@ -1293,6 +1293,36 @@ function isTrackComplete(track){
     return live!=null ? live>0 : !!it.doneDate;
   });
 }
+// أول مسار لم يُنجز بعد لطالب معيّن (أو null إن لم يوجد) — يُستخدم لمنع فتح مسار جديد قبل إنجاز السابق
+function getUnfinishedTrack(studentId){
+  const tracks = getStudentTracks(studentId);
+  return tracks.find(t=>!isTrackComplete(t)) || null;
+}
+// حذف عنصر/مسار لم يُنجز بعد (لم يصل منه أي تسجيل صوتي) — يجلب أحدث نسخة من قاعدة البيانات أولًا قبل الحذف والحفظ
+// حماية إضافية: لا يحذف إطلاقًا إذا وُجد تسجيل صوتي بانتظار التقييم (pendingAudio)، حتى لو طُلب ذلك
+async function deleteUnfinishedPendingEntry(trackId, itemId){
+  let all;
+  try{
+    const latest = await storeGet(TASMEE_KEY);
+    all = latest ? JSON.parse(latest) : tasmeeData.slice();
+  }catch(e){ all = tasmeeData.slice(); }
+  const track = all.find(t=>t.id===trackId);
+  if(!track) return false;
+  const item = (track.items||[]).find(it=>it.id===itemId);
+  if(item && item.pendingAudio) return false;
+  track.items = (track.items||[]).filter(it=>it.id!==itemId);
+  const studentId = track.studentId;
+  if(!track.items.length){
+    all = all.filter(t=>t.id!==trackId);
+    const mine = all.filter(t=>t.studentId===studentId).sort((a,b)=>(a.trackNumber||0)-(b.trackNumber||0));
+    mine.forEach((t,i)=>{ t.trackNumber = i+1; });
+  }
+  tasmeeData = all;
+  let ok;
+  try{ ok = !!(await storeSet(TASMEE_KEY, JSON.stringify(all))); }
+  catch(e){ ok = await saveTasmeeRaw(); }
+  return ok;
+}
 
 // اعتماد تلقائي لإنجاز المهمة المرتبطة بمسار ما، إذا اكتمل تقييم كل عناصره
 async function syncLinkedTaskCompletion(studentId){
@@ -1355,6 +1385,11 @@ function itemStatus(item, liveRating){
 // يبحث عن تقييم حيّ من الأنظمة الموجودة أصلًا (جزء عمّ / متابعة القرآن بالأجزاء)
 // إن كان عنوان عنصر الخطة مطابقًا لاسم سورة أو جزء معروف — بدل الاعتماد على تقييم منفصل يدويًا
 function getLiveRating(studentId, label){
+  // نظام "التقييم الحي" هذا مخصّص فقط لطلاب المركز الداخليين الذين لديهم صفحات منفصلة لتقييم جزء عمّ/الجزء الكامل
+  // الطالب من خارج المركز (تجريبي) ليست له هذه الصفحات أصلًا، فتقييم مساراته يعتمد فقط على rating/doneDate الخاصين بعنصر المسار
+  // بدون هذا الاستثناء: أي مسار تجريبي بعنوان سورة تصادف وجودها في قوائم جزء عمّ (مثل "الطور" أو "الواقعة")
+  // كان سيبقى "غير مكتمل" للأبد حتى بعد تقييمه بالكامل، لأن juzAmmaProgress لا يُحدَّث أبدًا لهذا الطالب
+  if(trialStudents.some(t=>t.id===studentId)) return null;
   let clean = (label||'').trim();
   clean = clean.replace(/^سورة\s+/, '').trim();
   const allHizbLabels = Object.values(JUZ_HIZB_SECTIONS).flat().map(sec=>sec.label);
@@ -3291,9 +3326,13 @@ function renderTasmeeTracksHome(){
 
     const pendingRows = pending.length ? pending.map(x=>{
       const it = x.item;
-      return '<div data-open-item="'+x.trackId+'|'+it.id+'" style="cursor:pointer;padding:12px 14px;border-radius:10px;background:#fff;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">'
+      const canDelete = !it.pendingAudio;
+      return '<div data-open-item="'+x.trackId+'|'+it.id+'" style="cursor:pointer;padding:12px 14px;border-radius:10px;background:#fff;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;">'
         + '<span style="font-weight:bold;color:var(--teal-dark);">'+escapeHtml(it.label||'')+(it.detail?' — '+escapeHtml(it.detail):'')+'</span>'
-        + (it.pendingAudio ? '<span style="background:#fde9c8;color:#8a5a1a;font-weight:bold;font-size:12px;padding:4px 10px;border-radius:10px;">🎤 بانتظار التقييم</span>' : '<span class="small-muted" style="font-size:12px;">لم يُرسَل بعد</span>')
+        + '<span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
+        +   (it.pendingAudio ? '<span style="background:#fde9c8;color:#8a5a1a;font-weight:bold;font-size:12px;padding:4px 10px;border-radius:10px;">🎤 بانتظار التقييم</span>' : '<span class="small-muted" style="font-size:12px;">لم يُرسَل بعد</span>')
+        +   (canDelete ? '<button data-delete-pending="'+x.trackId+'|'+it.id+'" title="حذف هذا المسار غير المنجز" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:17px;padding:2px 4px;line-height:1;">🗑️</button>' : '')
+        + '</span>'
         + '</div>';
     }).join('') : '<div class="empty">لا يوجد أي مسار غير منجز حاليًا.</div>';
 
@@ -3357,6 +3396,16 @@ function bindTasmeeTracksHome(){
       window.__tasmeeReportImageUrl = null;
       window.__tasmeeReportBlob = null;
       currentView = 'trialAdminEvaluationPage';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-delete-pending]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      const [trackId, itemId] = el.getAttribute('data-delete-pending').split('|');
+      if(!confirm('حذف هذا المسار غير المنجز؟ لم يصل منه أي تسجيل صوتي بعد، ولا يمكن التراجع بعد الحذف.')) return;
+      const ok = await deleteUnfinishedPendingEntry(trackId, itemId);
+      toastSave(ok, ok ? '🗑️ تم حذف المسار غير المنجز' : 'تعذّر الحذف — قد يكون وصل تسجيل صوتي له للتو');
       render();
     });
   });
@@ -3646,11 +3695,14 @@ function renderInteractiveTasmeeReview(item){
     + '<div class="row-actions" style="margin-top:14px;"><button id="finalizeInteractiveEvalBtn" class="btn btn-primary" style="width:100%;">✅ تقييم</button></div>'
     + '</div>';
 }
-// يحفظ موضع تشغيل صوت الطالب الحالي (الزمن وحالة التشغيل) قبل أي إعادة عرض تُفقِد عنصر <audio> الحالي
-function captureAudioResumeState(item){
+// يحفظ موضع تشغيل صوت الطالب الحالي (الزمن) قبل أي إعادة عرض تُفقِد عنصر <audio> الحالي، ويُوقفه فورًا
+// resumePlaying: true إذا أردنا استئناف التشغيل تلقائيًا بعد إعادة العرض (مثلًا بعد اختيار نوع الخطأ)، false لإبقائه متوقفًا (مثلًا عند فتح خيارات كلمة جديدة لمراجعتها)
+function captureAudioResumeState(item, resumePlaying){
   const audioEl = document.getElementById('pendingAudio_'+item.id);
   if(audioEl){
-    window.__audioResumeState = { itemId: item.id, time: audioEl.currentTime, playing: !audioEl.paused };
+    const time = audioEl.currentTime;
+    if(!audioEl.paused) audioEl.pause();
+    window.__audioResumeState = { itemId: item.id, time: time, playing: !!resumePlaying };
   }
 }
 // يستعيد موضع التشغيل المحفوظ على عنصر <audio> الجديد بعد إعادة العرض، ليكمل من حيث توقّف بدل البداية
@@ -3667,7 +3719,8 @@ function bindInteractiveTasmeeReview(item){
   restoreAudioResumeState(item);
   document.querySelectorAll('#ayahInteractiveText [data-word-key]').forEach(el=>{
     el.addEventListener('click', ()=>{
-      captureAudioResumeState(item);
+      // الضغط على أي كلمة يوقف التسجيل فورًا، سواء لفتح خيارات تحديد الخطأ أو لإغلاقها دون اختيار
+      captureAudioResumeState(item, false);
       const key = el.getAttribute('data-word-key');
       // النقر على نفس الكلمة مرة أخرى أثناء ظهور خياراتها يُغلقها (تبديل حالة)
       if(window.__editingWordKey === key){
@@ -3683,7 +3736,8 @@ function bindInteractiveTasmeeReview(item){
 
   document.querySelectorAll('[data-mark-type="tashkeel"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      captureAudioResumeState(item);
+      // بعد اختيار نوع الخطأ (تشكيل) يُكمل التسجيل تلقائيًا من حيث توقف
+      captureAudioResumeState(item, true);
       const key = btn.getAttribute('data-key');
       const wordEl = document.querySelector('[data-word-key="'+key+'"]');
       const wordText = wordEl ? wordEl.getAttribute('data-word-text') : '';
@@ -3696,14 +3750,16 @@ function bindInteractiveTasmeeReview(item){
   });
   document.querySelectorAll('[data-mark-type="tabdeel"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      captureAudioResumeState(item);
+      // اختيار "تبديل" كنوع للخطأ يُكمل التسجيل أيضًا، حتى أثناء كتابة ما قاله الطالب
+      captureAudioResumeState(item, true);
       window.__tabdeelActiveKey = btn.getAttribute('data-key');
       render();
     });
   });
   document.querySelectorAll('[data-mark-type="qafz"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      captureAudioResumeState(item);
+      // بعد اختيار نوع الخطأ (قفز) يُكمل التسجيل تلقائيًا من حيث توقف
+      captureAudioResumeState(item, true);
       const key = btn.getAttribute('data-key');
       const wordEl = document.querySelector('[data-word-key="'+key+'"]');
       const ayahOfWord = wordEl ? parseInt(wordEl.getAttribute('data-word-ayah'), 10) : null;
@@ -3716,7 +3772,8 @@ function bindInteractiveTasmeeReview(item){
   });
   document.querySelectorAll('[data-mark-clear-inline]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      captureAudioResumeState(item);
+      // إزالة تصنيف الخطأ تُكمل التسجيل أيضًا بدل تركه متوقفًا بلا داعٍ
+      captureAudioResumeState(item, true);
       const key = btn.getAttribute('data-mark-clear-inline');
       if(item.wordErrors) delete item.wordErrors[key];
       window.__editingWordKey = null;
@@ -3727,7 +3784,7 @@ function bindInteractiveTasmeeReview(item){
   const tabdeelConfirmBtn = document.getElementById('tabdeelConfirmInlineBtn');
   if(tabdeelConfirmBtn){
     tabdeelConfirmBtn.addEventListener('click', ()=>{
-      captureAudioResumeState(item);
+      captureAudioResumeState(item, true);
       const key = tabdeelConfirmBtn.getAttribute('data-key');
       const said = document.getElementById('tabdeelSaidInline').value.trim();
       if(!said) return;
@@ -4303,6 +4360,17 @@ function bindTasmeeHome(){
 function renderTasmeeForm(){
   const s = resolveProfileEntity(currentStudentId);
   if(!s){ currentView='list'; return renderListView(); }
+  const blockingTrack = getUnfinishedTrack(currentStudentId);
+  if(blockingTrack){
+    return '<span class="back-link" data-go="tasmeeHome">← رجوع</span>'
+      + '<div class="card">'
+      +   '<h2 style="margin-top:0;text-align:center;">🔒 لا يمكن فتح مسار جديد</h2>'
+      +   '<p style="text-align:center;">لدى <strong>'+escapeHtml(s.name)+'</strong> مسار لم يُنجز بعد:</p>'
+      +   '<p style="text-align:center;color:var(--gold);font-weight:bold;">'+escapeHtml(blockingTrack.amount||'')+'</p>'
+      +   '<p class="small-muted" style="text-align:center;">يجب إنجازه وتقييم كل عناصره أولًا قبل فتح مسار جديد.</p>'
+      +   '<button data-go="tasmeeTracksHome" class="btn btn-gold" style="width:100%;margin-top:10px;">عرض المسار الحالي</button>'
+      + '</div>';
+  }
   const items = window.__newTrackItems || [];
   const rows = items.map((it,i)=>'<div style="display:flex;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'
     + '<span style="flex:0 0 18px;">'+(i+1)+'</span>'
@@ -4335,6 +4403,17 @@ function renderTasmeeForm(){
 function renderJuzShortcutPage(){
   const s = resolveProfileEntity(currentStudentId);
   if(!s){ currentView='list'; return renderListView(); }
+  const blockingTrack = getUnfinishedTrack(currentStudentId);
+  if(blockingTrack){
+    return '<span class="back-link" data-go="category">← رجوع</span>'
+      + '<div class="card">'
+      +   '<h2 style="margin-top:0;text-align:center;">🔒 لا يمكن فتح مسار جديد</h2>'
+      +   '<p style="text-align:center;">لدى <strong>'+escapeHtml(s.name)+'</strong> مسار لم يُنجز بعد:</p>'
+      +   '<p style="text-align:center;color:var(--gold);font-weight:bold;">'+escapeHtml(blockingTrack.amount||'')+'</p>'
+      +   '<p class="small-muted" style="text-align:center;">يجب إنجازه وتقييم كل عناصره أولًا قبل فتح مسار جديد.</p>'
+      +   '<button data-go="tasmeeTracksHome" class="btn btn-gold" style="width:100%;margin-top:10px;">عرض المسار الحالي</button>'
+      + '</div>';
+  }
 
   let boxes = '';
   for(let n=1; n<=30; n++){
@@ -4496,11 +4575,22 @@ function buildFullQuranUnits(){
 function renderTasmeeQuickForm(){
   const s = resolveProfileEntity(currentStudentId);
   if(!s){ currentView='list'; return renderListView(); }
+  const backTarget = (currentUser?.role === 'trialStudent') ? 'home' : 'category';
+  const blockingTrack = getUnfinishedTrack(currentStudentId);
+  if(blockingTrack){
+    return '<span class="back-link" data-go="'+backTarget+'">← رجوع</span>'
+      + '<div class="card">'
+      +   '<h2 style="margin-top:0;text-align:center;">🔒 لا يمكن فتح مسار جديد</h2>'
+      +   '<p style="text-align:center;">لدى <strong>'+escapeHtml(s.name)+'</strong> مسار لم يُنجز بعد:</p>'
+      +   '<p style="text-align:center;color:var(--gold);font-weight:bold;">'+escapeHtml(blockingTrack.amount||'')+'</p>'
+      +   '<p class="small-muted" style="text-align:center;">يجب إنجازه وتقييم كل عناصره أولًا قبل فتح مسار جديد.</p>'
+      +   '<button data-go="tasmeeTracksHome" class="btn btn-gold" style="width:100%;margin-top:10px;">عرض المسار الحالي</button>'
+      + '</div>';
+  }
 
   const surahOpts = QURAN_SURAHS.map(su=>'<option value="'+su.n+'">'+toAR(su.n)+' — '+escapeHtml(su.name)+'</option>').join('');
 
   const today = todayStr();
-  const backTarget = (currentUser?.role === 'trialStudent') ? 'home' : 'category';
   return '<span class="back-link" data-go="'+backTarget+'">← رجوع</span>'
     + '<div class="card"><h2>🎯 مسار جديد — '+escapeHtml(s.name)+'</h2>'
     + '<h3 style="margin-bottom:6px;">مدة المسار</h3>'
