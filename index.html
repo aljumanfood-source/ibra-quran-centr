@@ -1007,7 +1007,7 @@ async function saveTestForms(){
     const merged = [...others, ...mine];
     testForms = merged;
     return await storeSet(TEST_FORMS_KEY, JSON.stringify(merged));
-  }catch(e){ return await storeSet(TEST_FORMS_KEY, JSON.stringify(testForms)); }
+  }catch(e){ return false; }
 }
 async function loadTestGrades(){ try{ const r=await storeGet(TEST_GRADES_KEY); testGrades=r?JSON.parse(r):[]; }catch(e){ testGrades=[]; } }
 async function saveTestGrades(){
@@ -1020,7 +1020,7 @@ async function saveTestGrades(){
     const merged = [...others, ...mine];
     testGrades = merged;
     return await storeSet(TEST_GRADES_KEY, JSON.stringify(merged));
-  }catch(e){ return await storeSet(TEST_GRADES_KEY, JSON.stringify(testGrades)); }
+  }catch(e){ return false; }
 }
 const NOTIFS_KEY = 'notifs_v1';
 const SUP_NOTES_PREFIX = 'sup_notes_';
@@ -1689,7 +1689,7 @@ async function saveStudents(){
     const merged = [...students, ...othersNew];
     students = merged;
     return await storeSet(STORAGE_KEY, JSON.stringify(merged));
-  }catch(e){ return await storeSet(STORAGE_KEY, JSON.stringify(students)); }
+  }catch(e){ return false; }
 }
 async function saveRecords(){
   try{
@@ -1703,7 +1703,7 @@ async function saveRecords(){
     const merged = [...records, ...othersNew];
     records = merged;
     return await storeSet(RECORDS_KEY, JSON.stringify(merged));
-  }catch(e){ return await storeSet(RECORDS_KEY, JSON.stringify(records)); }
+  }catch(e){ return false; }
 }
 
 function fmtDate(d){
@@ -4316,7 +4316,7 @@ function bindTasmeeHome(){
       let ok = false;
       try{
         const latest = await storeGet(TASMEE_KEY);
-        let all = latest ? JSON.parse(latest) : tasmeeData;
+        let all = latest ? JSON.parse(latest) : tasmeeData.slice();
         all = all.filter(t=>t.id!==targetId);
         // إعادة ترقيم مسارات نفس الطالب بعد الحذف
         const sid = currentStudentId;
@@ -4325,8 +4325,9 @@ function bindTasmeeHome(){
         tasmeeData = all;
         ok = !!(await storeSet(TASMEE_KEY, JSON.stringify(all)));
       }catch(e){
-        tasmeeData = tasmeeData.filter(t=>t.id!==targetId);
-        ok = await saveTasmeeRaw();
+        // كتابة آمنة فقط: عند فشل جلب أحدث نسخة أو الحفظ، لا نكتب أبدًا نسخة محلية قديمة خامة فوق قاعدة البيانات
+        // (هذا بالضبط نمط الخطأ الذي تسبب سابقًا بمحو بيانات حقيقية لطلاب آخرين) — نكتفي بالإبلاغ عن الفشل فقط
+        ok = false;
       }
       toastSave(ok, 'تم حذف المسار');
       window.__currentTasmeeTrackId = null;
@@ -6802,8 +6803,8 @@ function bindCircleForm(){
       circlesData = all;
       ok = !!(await storeSet(CIRCLES_KEY, JSON.stringify(all)));
     }catch(e){
-      circlesData.push(newCircle);
-      ok = await saveCirclesRaw();
+      // كتابة آمنة فقط: لا نكتب نسخة محلية قديمة فوق قاعدة البيانات عند الفشل، نكتفي بالإبلاغ عنه
+      ok = false;
     }
     toastSave(ok,'تم إنشاء الحلقة');
     currentView='circleSubject'; render();
@@ -6974,9 +6975,8 @@ async function updateCircleStudentIds(circleId, newStudentIds){
     circlesData = all;
     ok = !!(await storeSet(CIRCLES_KEY, JSON.stringify(all)));
   }catch(e){
-    const target = circlesData.find(x=>x.id===circleId);
-    if(target) target.studentIds = newStudentIds;
-    ok = await saveCirclesRaw();
+    // كتابة آمنة فقط: لا نكتب نسخة محلية قديمة فوق قاعدة البيانات عند الفشل، نكتفي بإرجاع فشل العملية
+    ok = false;
   }
   return ok;
 }
@@ -7031,10 +7031,9 @@ function bindCircleDetail(){
           circleAttendanceData = allA.filter(a=>a.circleId!==targetId);
           await storeSet(CIRCLE_ATTENDANCE_KEY, JSON.stringify(circleAttendanceData));
         }catch(e){
-          circlesData = circlesData.filter(x=>x.id!==targetId);
-          circleAttendanceData = circleAttendanceData.filter(a=>a.circleId!==targetId);
-          await saveCirclesRaw();
-          await storeSet(CIRCLE_ATTENDANCE_KEY, JSON.stringify(circleAttendanceData));
+          // كتابة آمنة فقط: لا نكتب أي نسخة محلية قديمة فوق قاعدة البيانات عند الفشل هنا إطلاقًا
+          showToast('تعذّر الحذف، تحقق من الاتصال وحاول مرة أخرى');
+          return;
         }
         showToast('تم الحذف'); currentView='circleSubject'; render();
       }
@@ -7175,8 +7174,8 @@ function bindCircleAttendanceForm(){
         circleAttendanceData = all;
         ok = !!(await storeSet(CIRCLE_ATTENDANCE_KEY, JSON.stringify(all)));
       }catch(e){
-        circleAttendanceData.push(record);
-        ok = await storeSet(CIRCLE_ATTENDANCE_KEY, JSON.stringify(circleAttendanceData));
+        // كتابة آمنة فقط: لا نكتب نسخة محلية قديمة فوق قاعدة البيانات عند الفشل، نكتفي بالإبلاغ عنه
+        ok = false;
       }
       // إضافة ملاحظة حضور في صفحة كل طالب
       if(c){
@@ -7949,8 +7948,8 @@ function bindEventForm(){
       eventsData = all;
       ok = !!(await storeSet(EVENTS_KEY, JSON.stringify(all)));
     }catch(e){
-      eventsData.push(ev);
-      ok = await saveEvents();
+      // كتابة آمنة فقط: لا نكتب نسخة محلية قديمة فوق قاعدة البيانات عند الفشل، نكتفي بالإبلاغ عنه
+      ok = false;
     }
     toastSave(ok,'تم حفظ الفعالية');
     pushNotif('event', '📅 '+autoTitle);
