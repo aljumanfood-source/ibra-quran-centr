@@ -1654,6 +1654,8 @@ async function loadData(){
       await cleanOrphanedCircleStudents();
       try{ await storeSet('boys_seed_pipeline_v1_done', '1'); }catch(e){}
     }
+    // دالة جديدة (خارج بوابة العلامة الرئيسية أعلاه عمدًا) لضمان تنفيذها رغم أن تلك البوابة أصبحت مُفعَّلة بالفعل
+    await seedNahwQawaidLevel2Circle();
   }
 
   render();
@@ -6405,6 +6407,56 @@ async function seedFiqhCircles(){
     });
     await saveCirclesRaw();
     
+  }catch(e){}
+}
+async function seedNahwQawaidLevel2Circle(){
+  try{
+    if(await storeGet('nahw_qawaid1_level2_circle_v1')) return;
+    await storeSet('nahw_qawaid1_level2_circle_v1','1'); // تثبيت العلامة فورًا وقائيًا
+    const TOPIC = 'كتاب القواعد ١- المستوى الثاني';
+    const TEACHER = 'ظاهر بن عيسى بن عيسى المالكي';
+    const names = ["أحمد بن حارث بن أحمد السيابي","خالد بن علي بن خليفة التوبي","سلطان بن سليمان بن خليفة الريامي","سليمان بن داود بن سليمان المسكري","عبدالرحمن بن محمد بن سالم الرواحي","عيسى بن أحمد بن عبدالله الغافري","محمد بن أحمد بن محمد الريامي","محمد بن ناصر بن هلال المصلحي","وائل بن بدر بن سعيد الحراصي","يوسف بن خالد بن سعيد العيسري"];
+    const ids = names.map(n=>{const st=students.find(x=>x.name.trim()===n.trim());return st?st.id:null;}).filter(Boolean);
+    let newCircleId = uid();
+    // إنشاء الحلقة بنمط جلب أحدث نسخة ثم دمج ثم حفظ (لا نكمل لتسجيل الحضور إن فشلت هذه الخطوة)
+    try{
+      const latestC = await storeGet(CIRCLES_KEY);
+      const allC = latestC ? JSON.parse(latestC) : circlesData.slice();
+      const existing = allC.find(c=>c.subject==='nahw' && c.topic===TOPIC);
+      if(existing){
+        newCircleId = existing.id; // الحلقة موجودة بالفعل (تشغيل سابق)، نستخدم معرفها بدل إنشاء تكرار
+        circlesData = allC;
+      }else{
+        allC.push({id:newCircleId, subject:'nahw', topic:TOPIC, teacher:TEACHER, studentIds:ids});
+        circlesData = allC;
+        await storeSet(CIRCLES_KEY, JSON.stringify(allC));
+      }
+    }catch(e){ return; }
+
+    // تسجيل الحضور لأيام الدراسة الفعلية (الأحد والثلاثاء والأربعاء والخميس، من ٢٨/٦/٢٠٢٦، باستثناء كل اثنين وباستثناء ٢٣/٧ كإجازة)
+    const classDates = ["2026-06-28","2026-06-30","2026-07-01","2026-07-02","2026-07-05","2026-07-07","2026-07-08","2026-07-09","2026-07-12","2026-07-14","2026-07-15","2026-07-16","2026-07-19","2026-07-21","2026-07-22","2026-07-26","2026-07-28","2026-07-29","2026-07-30"];
+    // استثناءات غياب بدون عذر: وائل الحراصي بتاريخ ٢٨/٧، ويوسف العيسري بتاريخ ١٩/٧
+    const absentUnexcusedByDate = {
+      '2026-07-28': 'وائل بن بدر بن سعيد الحراصي',
+      '2026-07-19': 'يوسف بن خالد بن سعيد العيسري'
+    };
+    try{
+      const latestA = await storeGet(CIRCLE_ATTENDANCE_KEY);
+      const allA = latestA ? JSON.parse(latestA) : circleAttendanceData.slice();
+      classDates.forEach(date=>{
+        if(allA.some(a=>a.circleId===newCircleId && a.date===date)) return; // تجنّب التكرار إن كان مُسجَّلًا بالفعل
+        const attendance = {};
+        ids.forEach(sid=>{ attendance[sid]='present'; });
+        const specialName = absentUnexcusedByDate[date];
+        if(specialName){
+          const st = students.find(x=>x.name.trim()===specialName.trim());
+          if(st && attendance[st.id]!==undefined) attendance[st.id]='absent_unexcused';
+        }
+        allA.push({ id:uid(), circleId:newCircleId, date, attendance });
+      });
+      circleAttendanceData = allA;
+      await storeSet(CIRCLE_ATTENDANCE_KEY, JSON.stringify(allA));
+    }catch(e){}
   }catch(e){}
 }
 async function seedNahwCircle(){
