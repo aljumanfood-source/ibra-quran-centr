@@ -2049,7 +2049,7 @@ function renderAdminHome(){
           <div class="home-dial-circle">🗓️</div>
           <div class="home-dial-label">البرامج</div>
         </div>
-        <div class="home-dial-item" data-home-go="summerAlbumViewer">
+        <div class="home-dial-item" data-home-go="${canManageSummerMemories() ? 'summerMemoriesHome' : 'summerAlbumViewer'}">
           <div class="home-dial-circle">🌞</div>
           <div class="home-dial-label">ذكرى صيف ١٤٤٨هـ</div>
         </div>
