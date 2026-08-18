@@ -1889,12 +1889,6 @@ function render(){
   } else if(currentView === 'myProfileHome'){
     app.innerHTML = renderMyProfileHome();
     bindMyProfileHome();
-  } else if(currentView === 'taleemSubjectsHome'){
-    app.innerHTML = renderTaleemSubjectsHome();
-    bindTaleemSubjectsHome();
-  } else if(currentView === 'nahwTopicsHome'){
-    app.innerHTML = renderNahwTopicsHome();
-    bindNahwTopicsHome();
   } else if(currentView === 'nahwIstithnaLesson'){
     app.innerHTML = renderNahwIstithnaLesson();
     bindNahwIstithnaLesson();
@@ -5057,25 +5051,48 @@ function renderWeeklyScheduleSection(){
 }
 
 // ========== صفحتي (شخصية) ==========
+// حالة توسّع القائمة المنسدلة (التعلم ← النحو)، تُحفظ في الذاكرة أثناء الجلسة فقط
+let myProfileTaleemExpanded = false;
+let myProfileNahwExpanded = false;
+
 function renderMyProfileHome(){
   const profileId = currentUser?.role === 'student' ? currentUser.studentId : getSelfProfileId();
   const isSelfSupervisor = profileId === getSelfProfileId();
   let iconsHtml = '';
+  let accordionHtml = '';
   if(isSelfSupervisor){
     // صفحة المشرف الشخصية: أُبقيت فقط "حفظ القرآن" و"التعلم" بناءً على طلب صريح (بقية التصنيفات لا تظهر هنا فقط، وتبقى كما هي في صفحات تقييم الطلاب)
     const hifzCount = records.filter(r=>r.studentId===profileId && r.category==='hifz').length;
-    const taleemCount = records.filter(r=>r.studentId===profileId && r.category==='taleem').length;
     iconsHtml += `
       <div class="role-dial-item" data-myprofile-go="hifz">
         <div class="dial-icon">📖</div>
         <div class="dial-title">حفظ القرآن</div>
         <div class="dial-count">${hifzCount} سجل</div>
       </div>
-      <div class="role-dial-item" data-myprofile-go="taleemSubjects">
+      <div class="role-dial-item" data-accordion-toggle="taleem">
         <div class="dial-icon">🎓</div>
-        <div class="dial-title">التعلم</div>
-        <div class="dial-count">${taleemCount} سجل</div>
+        <div class="dial-title">التعلم ${myProfileTaleemExpanded ? '▾' : '▸'}</div>
       </div>`;
+
+    // قائمة منسدلة: التعلم ← النحو ← الاستثناء (بدل التنقل بين صفحات منفصلة)
+    if(myProfileTaleemExpanded){
+      accordionHtml += `
+        <div style="margin:4px 0 0 0;padding-right:14px;border-right:2px solid var(--gold);">
+          <div class="role-dial-item" data-accordion-toggle="nahw" style="justify-content:flex-start;gap:8px;padding:10px;">
+            <div class="dial-icon" style="font-size:20px;">📗</div>
+            <div class="dial-title" style="font-size:13.5px;">النحو ${myProfileNahwExpanded ? '▾' : '▸'}</div>
+          </div>`;
+      if(myProfileNahwExpanded){
+        accordionHtml += `
+          <div style="margin:0 0 0 0;padding-right:14px;border-right:2px solid var(--teal-dark);">
+            <div class="role-dial-item" data-lesson-go="istithna" style="justify-content:flex-start;gap:8px;padding:10px;">
+              <div class="dial-icon" style="font-size:18px;">✏️</div>
+              <div class="dial-title" style="font-size:13px;">الاستثناء</div>
+            </div>
+          </div>`;
+      }
+      accordionHtml += `</div>`;
+    }
   } else {
     Object.keys(CATEGORIES).forEach(key=>{
       const cat = CATEGORIES[key];
@@ -5096,6 +5113,7 @@ function renderMyProfileHome(){
       <div class="role-dial-grid">
         ${iconsHtml}
       </div>
+      ${accordionHtml}
     </div>
   `;
 }
@@ -5108,40 +5126,31 @@ function bindMyProfileHome(){
       currentStudentId = currentUser?.role === 'student' ? currentUser.studentId : getSelfProfileId();
       if(key === 'reports'){ currentView = 'studentReports'; render(); return; }
       if(key === 'tasks'){ currentView = 'taskListPage'; render(); return; }
-      if(key === 'taleemSubjects'){ currentView = 'taleemSubjectsHome'; render(); return; }
       currentCategory = key;
       currentView = 'category';
       render();
     });
   });
-}
-
-// صفحة اختيار المادة داخل "التعلم" (حاليًا: النحو فقط، وسيُضاف غيرها لاحقًا)
-function renderTaleemSubjectsHome(){
-  return renderNavBar('myProfileHome') + `
-    <div class="card">
-      <h2>🎓 التعلم</h2>
-      <p class="small-muted" style="margin:0 0 10px;">اختر المادة</p>
-      <div class="role-dial-grid">
-        <div class="role-dial-item" data-taleemsubject-go="nahw">
-          <div class="dial-icon">📗</div>
-          <div class="dial-title">النحو</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-function bindTaleemSubjectsHome(){
-  bindCommon();
-  document.querySelectorAll('[data-taleemsubject-go]').forEach(el=>{
+  document.querySelectorAll('[data-accordion-toggle]').forEach(el=>{
     el.addEventListener('click', ()=>{
-      const key = el.getAttribute('data-taleemsubject-go');
-      if(key === 'nahw'){ currentView = 'nahwTopicsHome'; render(); return; }
+      const key = el.getAttribute('data-accordion-toggle');
+      if(key === 'taleem'){
+        myProfileTaleemExpanded = !myProfileTaleemExpanded;
+        if(!myProfileTaleemExpanded) myProfileNahwExpanded = false; // طي المستوى الأعلى يطوي ما بداخله أيضًا
+      } else if(key === 'nahw'){
+        myProfileNahwExpanded = !myProfileNahwExpanded;
+      }
+      render();
+    });
+  });
+  document.querySelectorAll('[data-lesson-go]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const key = el.getAttribute('data-lesson-go');
+      if(key === 'istithna'){ currentView = 'nahwIstithnaLesson'; render(); return; }
     });
   });
 }
 
-// صفحة اختيار الموضوع داخل "النحو" (حاليًا: الاستثناء فقط، وستُضاف مواضيع أخرى لاحقًا)
 // درس الاستثناء (النحو) — المحتوى مُزوَّد من المشرف مباشرة
 const ISTITHNA_LESSON = [
   { type: 'النوع الأول: التام المثبت', rows: [
@@ -5178,7 +5187,7 @@ function renderNahwIstithnaLesson(){
       </table>
     </div>
   `).join('');
-  return renderNavBar('nahwTopicsHome') + `
+  return renderNavBar('myProfileHome') + `
     <div class="card">
       <h2>✏️ درس الاستثناء</h2>
       ${sections}
@@ -5187,33 +5196,6 @@ function renderNahwIstithnaLesson(){
 }
 function bindNahwIstithnaLesson(){
   bindCommon();
-}
-function renderNahwTopicsHome(){
-  return renderNavBar('taleemSubjectsHome') + `
-    <div class="card">
-      <h2>📗 النحو</h2>
-      <p class="small-muted" style="margin:0 0 10px;">اختر الموضوع</p>
-      <div class="role-dial-grid">
-        <div class="role-dial-item" data-nahwtopic-go="istithna">
-          <div class="dial-icon">✏️</div>
-          <div class="dial-title">الاستثناء</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-function bindNahwTopicsHome(){
-  bindCommon();
-  document.querySelectorAll('[data-nahwtopic-go]').forEach(el=>{
-    el.addEventListener('click', ()=>{
-      const key = el.getAttribute('data-nahwtopic-go');
-      if(key === 'istithna'){
-        currentView = 'nahwIstithnaLesson';
-        render();
-        return;
-      }
-    });
-  });
 }
 
 // ========== المهمة التلقائية اليومية: تلاوة جزء من القرآن حسب التقويم الهجري ==========
