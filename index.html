@@ -1895,6 +1895,9 @@ function render(){
   } else if(currentView === 'nahwTopicsHome'){
     app.innerHTML = renderNahwTopicsHome();
     bindNahwTopicsHome();
+  } else if(currentView === 'nahwIstithnaLesson'){
+    app.innerHTML = renderNahwIstithnaLesson();
+    bindNahwIstithnaLesson();
   } else if(currentView === 'taskListPage'){
     app.innerHTML = renderTaskListPage();
     bindTaskListPage();
@@ -5139,6 +5142,52 @@ function bindTaleemSubjectsHome(){
 }
 
 // صفحة اختيار الموضوع داخل "النحو" (حاليًا: الاستثناء فقط، وستُضاف مواضيع أخرى لاحقًا)
+// درس الاستثناء (النحو) — المحتوى مُزوَّد من المشرف مباشرة
+const ISTITHNA_LESSON = [
+  { type: 'النوع الأول: التام المثبت', rows: [
+    ['فشربوا منه إلا قليلًا منهم', 'مستثنى'],
+    ['فسجد الملائكة كلهم أجمعون إلا إبليس', 'مستثنى'],
+    ['فأنجيناه وأهله إلا امرأته', 'مستثنى'],
+    ['قم الليل إلا قليلًا', 'مستثنى'],
+    ['فلبث فيهم ألف سنة إلا خمسين عامًا', 'مستثنى'],
+  ]},
+  { type: 'النوع الثاني: التام المنفي', rows: [
+    ['ولم يكن لهم شهداء إلا أنفسهم', 'بدل'],
+    ['ولا يلتفت منكم أحد إلا امرأتك', 'مستثنى (ويجوز بدل)'],
+    ['ما فعلوه إلا قليل منهم', 'بدل'],
+    ['ومن يغفر الذنوب إلا الله', 'بدل'],
+    ['ومن يقنط من رحمة ربه إلا الضالون', 'بدل'],
+  ]},
+  { type: 'النوع الثالث: الناقص المنفي (الاستثناء المفرَّغ)', rows: [
+    ['وما محمد إلا رسول', 'خبر'],
+    ['وما أنتم إلا بشر مثلنا', 'خبر'],
+    ['إن هذا إلا خلق الأولين', 'خبر'],
+    ['فهل يهلك إلا القوم الفاسقون', 'نائب فاعل'],
+    ['لا يصلاها إلا الأشقى', 'فاعل'],
+  ]},
+];
+function renderNahwIstithnaLesson(){
+  const sections = ISTITHNA_LESSON.map(sec => `
+    <div class="section-block" style="border-right-color:var(--teal-dark);">
+      <h4 style="font-size:14px;margin-bottom:8px;">${escapeHtml(sec.type)}</h4>
+      <table>
+        <thead><tr><th>المثال</th><th>حكم المستثنى</th></tr></thead>
+        <tbody>
+          ${sec.rows.map(([ex, rule]) => `<tr><td>${escapeHtml(ex)}</td><td><span class="pill">${escapeHtml(rule)}</span></td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+  return renderNavBar('nahwTopicsHome') + `
+    <div class="card">
+      <h2>✏️ درس الاستثناء</h2>
+      ${sections}
+    </div>
+  `;
+}
+function bindNahwIstithnaLesson(){
+  bindCommon();
+}
 function renderNahwTopicsHome(){
   return renderNavBar('taleemSubjectsHome') + `
     <div class="card">
@@ -5159,9 +5208,7 @@ function bindNahwTopicsHome(){
     el.addEventListener('click', ()=>{
       const key = el.getAttribute('data-nahwtopic-go');
       if(key === 'istithna'){
-        currentStudentId = getSelfProfileId();
-        currentCategory = 'taleem';
-        currentView = 'category';
+        currentView = 'nahwIstithnaLesson';
         render();
         return;
       }
