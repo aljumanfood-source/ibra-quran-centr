@@ -1489,12 +1489,27 @@ let _saveTimer = null;
 
 async function initBinCache(){
   try{
-    const r = await fetch(FIREBASE_URL + '/.json?t=' + Date.now(), { cache:'no-store' });
-    if(!r.ok) throw new Error('fetch error '+r.status);
-    const d = await r.json();
-    _binCache = d || {};
+    // نجلب أولًا قائمة المفاتيح فقط (طلب خفيف جدًا)، ثم نجلب كل مفتاح على حدة بالتوازي،
+    // مع استثناء مفتاح "ذكرى صيف ١٤٤٨هـ" عمدًا (يحوي صورًا ثقيلة) من هذا التحميل الأساسي —
+    // فهو يُجلب بشكل منفصل ومؤجَّل فقط عند فتح صفحة الذكريات فعليًا (عبر loadSummerMemories)،
+    // بدل تحميله في كل مرة يُفتح فيها التطبيق حتى لو لم يزرها أحد إطلاقًا
+    const shallowRes = await fetch(FIREBASE_URL + '/.json?shallow=true&t=' + Date.now(), { cache:'no-store' });
+    if(!shallowRes.ok) throw new Error('shallow fetch error '+shallowRes.status);
+    const shallowKeys = await shallowRes.json();
+    const keys = Object.keys(shallowKeys || {}).filter(k => k !== SUMMER_MEMORIES_KEY);
+    const entries = await Promise.all(keys.map(async k=>{
+      try{
+        const r = await fetch(FIREBASE_URL + '/' + encodeURIComponent(k) + '.json?t=' + Date.now(), { cache:'no-store' });
+        if(!r.ok) return null;
+        const v = await r.json();
+        return [k, v];
+      }catch(e){ return null; }
+    }));
+    const newCache = {};
+    entries.forEach(entry=>{ if(entry){ newCache[entry[0]] = entry[1]; } });
+    _binCache = newCache;
     try{ localStorage.setItem('_jb_cache', JSON.stringify(_binCache)); }catch(e){}
-    console.log('✅ Firebase loaded');
+    console.log('✅ Firebase loaded ('+keys.length+' مفاتيح، مع تأجيل ذكرى صيف ١٤٤٨هـ)');
   }catch(e){
     console.warn('⚠ Firebase offline, using localStorage:', e.message);
     try{ const c=localStorage.getItem('_jb_cache'); _binCache=c?JSON.parse(c):{}; }
@@ -1504,6 +1519,13 @@ async function initBinCache(){
 
 async function storeGet(key){
   if(!_binCache) await initBinCache();
+  if(key === SUMMER_MEMORIES_KEY && _binCache[key] === undefined){
+    // شبكة أمان: إن طُلب هذا المفتاح تحديدًا قبل أن يُجلب بشكل صريح عبر loadSummerMemories، نجلبه الآن فقط (مرة واحدة، ونخزّنه للطلبات اللاحقة في نفس الجلسة)
+    try{
+      const r = await fetch(FIREBASE_URL + '/' + SUMMER_MEMORIES_KEY + '.json?t=' + Date.now(), { cache:'no-store' });
+      if(r.ok){ _binCache[key] = await r.json(); }
+    }catch(e){}
+  }
   const v = _binCache[key];
   if(v === undefined || v === null) return null;
   return typeof v === 'string' ? v : JSON.stringify(v);
@@ -1576,7 +1598,7 @@ async function loadData(){
   await loadTasmee();
   await loadEvents();
   await loadTasks();
-  await loadSummerMemories();
+  // ذكرى صيف ١٤٤٨هـ أُزيلت من هنا عمدًا: تحوي صورًا ثقيلة، وتُحمَّل الآن بشكل مؤجَّل فقط عند فتح صفحتها فعليًا (انظر bindHome)
   await loadSummerAlbumSent();
   await loadSummerSealedMessages();
   await loadTrialStudents();
@@ -2068,7 +2090,7 @@ function renderAdminHome(){
 
 function bindHome(){
   document.querySelectorAll('[data-home-go]').forEach(el=>{
-    el.addEventListener('click', ()=>{
+    el.addEventListener('click', async ()=>{
       const go = el.getAttribute('data-home-go');
       if(go === 'myPage'){
         currentStudentId = currentUser.studentId;
@@ -2090,6 +2112,13 @@ function bindHome(){
         currentCategory = 'hifz';
         window.__achievementsBackView = 'home';
         currentView = 'achievementsReport';
+      } else if(go === 'summerMemoriesHome' || go === 'summerAlbumViewer'){
+        // تحميل مؤجَّل: نجلب ذكريات الصيف الآن فقط (عند الفتح الفعلي)، وليس عند إقلاع التطبيق
+        currentView = go;
+        showFollowMenu = false;
+        await loadSummerMemories();
+        render();
+        return;
       } else {
         currentView = go;
         showFollowMenu = false;
