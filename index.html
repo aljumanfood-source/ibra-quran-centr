@@ -2032,20 +2032,28 @@ function renderHome(){
     `;
   }
 
-  // قسم البنين: الإدارة (يمين) وصفحتي (يسار)، ثم جدول المهام أسفلهما
-  const taskWidget = canEvaluate() ? renderTaskBoardWidget() : '';
+  // قسم البنين: صفحة رئيسية مبسَّطة بقسمين فقط (بناءً على طلب صريح)
+  // المعلم/المشرف: ذكرى + قوائم الطلاب — الطالب: ذكرى + صفحتي
+  // بقية الأقسام (أرشيف ١٤٤٨هـ بكل محتوياته، جدول المهام) لم تُحذف، فقط أُخفيت من هنا مؤقتًا
+  const isStudentRole = currentUser?.role === 'student';
+  const memoriesGo = canManageSummerMemories() ? 'summerMemoriesHome' : 'summerAlbumViewer';
   return header + `
     <div class="home-dial-grid" style="grid-template-columns:repeat(2,1fr);max-width:340px;">
-      <div class="home-dial-item" data-home-go="adminHome">
-        <div class="home-dial-circle">📦</div>
-        <div class="home-dial-label">أرشيف ١٤٤٨هـ</div>
+      <div class="home-dial-item" data-home-go="${memoriesGo}">
+        <div class="home-dial-circle">🌞</div>
+        <div class="home-dial-label">ذكرى</div>
       </div>
+      ${isStudentRole ? `
       <div class="home-dial-item" data-home-go="myProfileHome">
         <div class="home-dial-circle">🗂️</div>
         <div class="home-dial-label">صفحتي</div>
-      </div>
+      </div>` : `
+      <div class="home-dial-item" data-home-go="list">
+        <div class="home-dial-circle">👥</div>
+        <div class="home-dial-label">قوائم الطلاب</div>
+      </div>`}
     </div>
-  ` + taskWidget;
+  `;
 }
 
 function renderAdminHome(){
@@ -2619,8 +2627,10 @@ function renderStudentDetail(){
   if(!s){ currentView='list'; return renderListView(); }
 
   let sectionsHtml = `<div class="section-grid">`;
-  Object.keys(CATEGORIES).forEach(key=>{
+  // أُبقي فقط "القيادة" و"الملحوظات" هنا بناءً على طلب صريح؛ بقية الفئات لم تُحذف من CATEGORIES نفسها، فقط لا تظهر في هذه الصفحة
+  ['qiyada', 'notes'].forEach(key=>{
     const cat = CATEGORIES[key];
+    if(!cat) return;
     const countLabel = cat.special ? 'عرض التقرير' : (records.filter(r=>r.studentId===s.id && r.category===key).length + ' سجل');
     sectionsHtml += `
       <div class="section-btn" data-cat="${key}">
@@ -5123,8 +5133,10 @@ function renderMyProfileHome(){
       accordionHtml += `</div>`;
     }
   } else {
-    Object.keys(CATEGORIES).forEach(key=>{
+    // صفحتي الخاصة بالطالب: أُبقيت فقط "القيادة" و"الملحوظات" بناءً على طلب صريح (بقية الفئات لم تُحذف من CATEGORIES، فقط لا تظهر هنا)
+    ['qiyada', 'notes'].forEach(key=>{
       const cat = CATEGORIES[key];
+      if(!cat) return;
       const countLabel = cat.special ? 'عرض التقرير' : (records.filter(r=>r.studentId===profileId && r.category===key).length + ' سجل');
       iconsHtml += `
         <div class="role-dial-item" data-myprofile-go="${key}">
