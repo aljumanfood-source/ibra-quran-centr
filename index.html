@@ -5100,11 +5100,11 @@ let myProfileNahwExpanded = false;
 
 // بيانات عجلة الإنجاز: ٥ أقسام بألوان متناسقة ومبهجة تناسب أعمار ١٥-٢٠ سنة
 const ACHIEVEMENT_WHEEL_SEGMENTS = [
-  { key: 'spiritual', label: 'روحي', color: '#1abc9c', emoji: '🕌' },
+  { key: 'spiritual', label: 'إيماني', color: '#1abc9c', emoji: '🕌' },
   { key: 'social', label: 'اجتماعي', color: '#ff8c42', emoji: '🤝' },
   { key: 'health', label: 'صحي', color: '#ff5e78', emoji: '💪' },
-  { key: 'academic', label: 'علمي', color: '#4a90d9', emoji: '📘' },
   { key: 'economic', label: 'اقتصادي', color: '#9b59b6', emoji: '💰' },
+  { key: 'academic', label: 'علمي', color: '#4a90d9', emoji: '📘' },
 ];
 let wheelSpinCount = 0;
 let currentAchievementSection = null;
@@ -5208,27 +5208,24 @@ function getTodayTasksForStudent(studentId){
   return tasks;
 }
 function renderAchievementWheel(){
-  const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
-  const slice = 360 / n;
-  const gradientStops = ACHIEVEMENT_WHEEL_SEGMENTS.map((seg,i)=> seg.color+' '+(i*slice)+'deg '+((i+1)*slice)+'deg').join(', ');
-  const R = 112; // نصف قطر وضع التسميات (بالبكسل) داخل عجلة قطرها ٢٨٠
   const profileId = currentUser?.role === 'student' ? currentUser.studentId : getSelfProfileId();
   const today = getTodayISO();
-  const labelsHtml = ACHIEVEMENT_WHEEL_SEGMENTS.map((seg,i)=>{
-    const centerAngle = i*slice + slice/2;
-    const rad = (centerAngle - 90) * Math.PI / 180; // تحويل بحيث تبدأ الزاوية صفر من الأعلى وتزيد باتجاه عقارب الساعة
-    const x = 140 + R * Math.cos(rad);
-    const y = 140 + R * Math.sin(rad);
+
+  // ٥ خانات عرضية (من الأعلى للأسفل، كل واحدة مقروءة من اليمين لليسار): شريط إنجاز بلون القسم فوق مسار أصفر فاتح موحَّد
+  const barsHtml = ACHIEVEMENT_WHEEL_SEGMENTS.map(seg=>{
     const activeGoal = getActiveGoalForSection(profileId, seg.key, today);
-    const pct = activeGoal ? getGoalProgressPercent(activeGoal) : null;
-    const badge = pct !== null ? `<div style="margin-top:2px;background:#fff;color:${seg.color};font-size:10px;font-weight:900;border-radius:10px;padding:1px 6px;display:inline-block;">${toArabicNum(pct)}٪</div>` : '';
-    return `<div style="position:absolute;left:${x}px;top:${y}px;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
-      <div style="font-size:20px;line-height:1;">${seg.emoji}</div>
-      <div style="font-size:12px;font-weight:900;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4);margin-top:2px;">${seg.label}</div>
-      ${badge}
-    </div>`;
+    const pct = activeGoal ? getGoalProgressPercent(activeGoal) : 0;
+    return `
+      <div class="small-muted" data-opensection="${seg.key}" style="cursor:pointer;background:#fff;border-radius:14px;padding:12px 14px;margin-bottom:10px;text-align:right;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+          <span style="font-weight:900;color:${seg.color};font-size:14.5px;">${seg.emoji} ${seg.label}</span>
+          <span style="font-weight:900;color:${seg.color};font-size:14.5px;">${toArabicNum(pct)}٪</span>
+        </div>
+        <div style="background:#fff3cd;border-radius:10px;height:16px;overflow:hidden;">
+          <div style="background:${seg.color};height:100%;width:${pct}%;transition:width .5s ease;"></div>
+        </div>
+      </div>`;
   }).join('');
-  const softWash = ACHIEVEMENT_WHEEL_SEGMENTS.map(s=>s.color+'1f').join(', ');
 
   // بطاقة مهام اليوم: تُجمَّع من كل الأهداف السارية حاليًا في كل الأقسام
   const todayTasks = getTodayTasksForStudent(profileId);
@@ -5245,18 +5242,9 @@ function renderAchievementWheel(){
   `).join('') : `<div class="small-muted" style="margin-top:8px;">لا توجد مهام مستحقة اليوم. أضف هدفًا من أي قسم لتبدأ!</div>`;
 
   return `
-    <div class="card" style="text-align:center;background:linear-gradient(135deg, ${softWash});border:1px solid #ffffffaa;">
-      <h2 style="margin-bottom:2px;">🎡 عجلة الإنجاز</h2>
-      <p class="small-muted" style="margin:0 0 18px;">حرّك العجلة بإصبعك واكتشف المجال الذي ستبدأ به رحلتك</p>
-      <div style="position:relative;width:280px;height:280px;margin:0 auto;touch-action:none;">
-        <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:30px;z-index:3;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));">🔻</div>
-        <div id="achievementWheelDisc" style="width:280px;height:280px;border-radius:50%;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.25);border:6px solid #fff;outline:2px solid var(--gold);cursor:grab;
-          background:conic-gradient(${gradientStops});transform:rotate(0deg);">
-          ${labelsHtml}
-          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:24px;pointer-events:none;">🎯</div>
-        </div>
-      </div>
-      <div id="wheelLandedLabel" style="min-height:30px;margin-top:16px;font-size:19px;font-weight:900;"></div>
+    <div class="card">
+      <h2 style="margin-bottom:14px;">📊 مقياس إنجاز الأهداف</h2>
+      ${barsHtml}
     </div>
     <div class="card" style="margin-top:12px;">
       <h2 style="font-size:16px;">📋 مهام اليوم</h2>
@@ -5264,90 +5252,14 @@ function renderAchievementWheel(){
     </div>
   `;
 }
-// يحدّد أي قسم يقع حاليًا تحت المؤشر العلوي الثابت، بناءً على زاوية دوران القرص الحالية
-function getSegmentAtPointer(rotationDeg){
-  const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
-  const slice = 360 / n;
-  const normalizedR = ((rotationDeg % 360) + 360) % 360;
-  const pointerOriginalAngle = (360 - normalizedR) % 360;
-  const idx = Math.floor(pointerOriginalAngle / slice) % n;
-  return ACHIEVEMENT_WHEEL_SEGMENTS[idx];
-}
-function getDiscRotation(disc){
-  return parseFloat((disc.style.transform.match(/rotate\(([-0-9.]+)deg\)/)||[0,0])[1]) || 0;
-}
 function bindAchievementWheel(){
-  const disc = document.getElementById('achievementWheelDisc');
-  const landedLabel = document.getElementById('wheelLandedLabel');
-  if(!disc) return;
-  const updateLandedLabel = ()=>{
-    const seg = getSegmentAtPointer(getDiscRotation(disc));
-    window.__lastWheelSegment = seg;
-    if(landedLabel){
-      landedLabel.style.color = seg.color;
-      landedLabel.innerHTML = seg.emoji + ' القسم ' + seg.label;
-    }
-  };
-  const openCurrentSection = ()=>{
-    const seg = getSegmentAtPointer(getDiscRotation(disc));
-    currentAchievementSection = seg.key;
-    currentView = 'achievementSection';
-    render();
-  };
-  updateLandedLabel(); // إظهار اسم القسم الواقع تحت المؤشر فور فتح الصفحة (حتى قبل أي تحريك)
-
-  let justDragged = false;
-  disc.addEventListener('click', ()=>{
-    if(justDragged){ justDragged = false; return; } // تجاهل نقرة click التلقائية التي يُطلقها المتصفح عقب السحب
-    spawnWheelConfetti();
-    openCurrentSection(); // النقر يفتح دومًا القسم الذي اختاره الطالب فعليًا بوضعه تحت المؤشر — لا عشوائية إطلاقًا
+  document.querySelectorAll('[data-opensection]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      currentAchievementSection = el.getAttribute('data-opensection');
+      currentView = 'achievementSection';
+      render();
+    });
   });
-
-  // تحريك العجلة يدويًا بالكامل بالسحب (إصبع أو فأرة): تدور بمقدار حركة الإصبع تمامًا، وتستقر عند أقرب قسم عند الإفلات
-  let dragLastAngle = 0, isDragging = false, dragMoved = false;
-  const getAngleFromCenter = (clientX, clientY)=>{
-    const rect = disc.getBoundingClientRect();
-    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
-    return Math.atan2(clientY - cy, clientX - cx) * 180 / Math.PI;
-  };
-  const dragStart = (clientX, clientY)=>{
-    isDragging = true;
-    dragMoved = false;
-    disc.style.transition = 'none';
-    dragLastAngle = getAngleFromCenter(clientX, clientY);
-  };
-  const dragMove = (clientX, clientY)=>{
-    if(!isDragging) return;
-    const angle = getAngleFromCenter(clientX, clientY);
-    let delta = angle - dragLastAngle;
-    if(delta > 180) delta -= 360; if(delta < -180) delta += 360;
-    if(Math.abs(delta) > 0.5) dragMoved = true;
-    const current = getDiscRotation(disc);
-    disc.style.transform = 'rotate(' + (current + delta) + 'deg)';
-    dragLastAngle = angle;
-    updateLandedLabel(); // تحديث اسم القسم حيًّا أثناء السحب نفسه، لا بعد التوقف فقط
-  };
-  const dragEnd = ()=>{
-    if(!isDragging) return;
-    isDragging = false;
-    if(dragMoved) justDragged = true; // سحبة حقيقية تحرَّكت فعليًا: نتجاهل نقرة click التالية
-    // عند الإفلات: نُثبِّت العجلة بلطف عند مركز أقرب قسم لها (دون أي عشوائية)، فقط لضبط الموضع بدقة بصريًا
-    const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
-    const slice = 360 / n;
-    const current = getDiscRotation(disc);
-    const seg = getSegmentAtPointer(current);
-    const idx = ACHIEVEMENT_WHEEL_SEGMENTS.indexOf(seg);
-    const centerAngle = idx*slice + slice/2;
-    const targetMod = (360 - centerAngle + 360) % 360;
-    // أقرب دوران مكافئ لزاوية current يحقق targetMod (دون أي قفزة كبيرة، فقط ضبط دقيق لأقرب موضع)
-    const diff = ((targetMod - current) % 360 + 540) % 360 - 180;
-    disc.style.transition = 'transform 0.4s ease-out';
-    disc.style.transform = 'rotate(' + (current + diff) + 'deg)';
-    setTimeout(updateLandedLabel, 420);
-  };
-  disc.addEventListener('pointerdown', (e)=>{ dragStart(e.clientX, e.clientY); });
-  window.addEventListener('pointermove', (e)=>{ if(isDragging) dragMove(e.clientX, e.clientY); });
-  window.addEventListener('pointerup', dragEnd);
 
   // أزرار "إنجاز" لمهام اليوم المعروضة أسفل العجلة
   document.querySelectorAll('[data-goal-done]').forEach(el=>{
