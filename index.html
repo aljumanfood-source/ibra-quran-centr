@@ -5247,7 +5247,7 @@ function renderAchievementWheel(){
   return `
     <div class="card" style="text-align:center;background:linear-gradient(135deg, ${softWash});border:1px solid #ffffffaa;">
       <h2 style="margin-bottom:2px;">🎡 عجلة الإنجاز</h2>
-      <p class="small-muted" style="margin:0 0 18px;">أدر العجلة، أو اسحبها بإصبعك، واكتشف المجال الذي ستبدأ به رحلتك</p>
+      <p class="small-muted" style="margin:0 0 18px;">حرّك العجلة بإصبعك واكتشف المجال الذي ستبدأ به رحلتك</p>
       <div style="position:relative;width:280px;height:280px;margin:0 auto;touch-action:none;">
         <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:30px;z-index:3;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));">🔻</div>
         <div id="achievementWheelDisc" style="width:280px;height:280px;border-radius:50%;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.25);border:6px solid #fff;outline:2px solid var(--gold);cursor:grab;
@@ -5256,9 +5256,7 @@ function renderAchievementWheel(){
           <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:24px;pointer-events:none;">🎯</div>
         </div>
       </div>
-      <div id="wheelLandedLabel" style="min-height:30px;margin-top:14px;font-size:19px;font-weight:900;"></div>
-      <button id="spinWheelBtn" class="btn btn-primary" style="margin-top:6px;padding:12px 34px;font-size:15px;border-radius:30px;">🌀 أدر العجلة</button>
-      <div id="wheelResultBox" style="display:none;margin-top:18px;"></div>
+      <div id="wheelLandedLabel" style="min-height:30px;margin-top:16px;font-size:19px;font-weight:900;"></div>
     </div>
     <div class="card" style="margin-top:12px;">
       <h2 style="font-size:16px;">📋 مهام اليوم</h2>
@@ -5267,11 +5265,10 @@ function renderAchievementWheel(){
   `;
 }
 function bindAchievementWheel(){
-  const btn = document.getElementById('spinWheelBtn');
   const disc = document.getElementById('achievementWheelDisc');
-  const resultBox = document.getElementById('wheelResultBox');
   const landedLabel = document.getElementById('wheelLandedLabel');
-  if(!btn || !disc) return;
+  if(!disc) return;
+  let isSpinning = false; // تحل محل الاعتماد على زر محذوف لتتبّع حالة الدوران
   const openLandedSection = ()=>{
     const seg = window.__lastWheelSegment;
     if(!seg) return;
@@ -5280,10 +5277,9 @@ function bindAchievementWheel(){
     render();
   };
   const spin = ()=>{
-    if(btn.disabled) return;
-    btn.disabled = true;
-    wheelHasLandedSegment = false; // أثناء الدوران: الضغط على العجلة يُدير من جديد، وليس فتحًا
-    resultBox.style.display = 'none';
+    if(isSpinning) return;
+    isSpinning = true;
+    wheelHasLandedSegment = false; // أثناء الدوران: التفاعل مع العجلة يُدير من جديد، وليس فتحًا
     if(landedLabel) landedLabel.textContent = '';
     const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
     const slice = 360 / n;
@@ -5302,27 +5298,18 @@ function bindAchievementWheel(){
         landedLabel.style.color = seg.color;
         landedLabel.innerHTML = seg.emoji + ' القسم ' + seg.label;
       }
-      resultBox.style.display = 'block';
-      resultBox.innerHTML = `
-        <div style="background:${seg.color}1a;border:2px solid ${seg.color};border-radius:16px;padding:16px;">
-          <div class="small-muted">اضغط على العجلة نفسها أو الزر أدناه لفتح القسم</div>
-          <button id="openWheelSectionBtn" class="btn" style="margin-top:10px;background:${seg.color};color:#fff;border:none;border-radius:24px;padding:10px 28px;font-size:14px;font-weight:900;cursor:pointer;">📂 افتح القسم</button>
-        </div>`;
-      const openBtn = document.getElementById('openWheelSectionBtn');
-      if(openBtn) openBtn.addEventListener('click', openLandedSection);
       spawnWheelConfetti();
-      btn.disabled = false;
-      wheelHasLandedSegment = true; // الآن أصبح الضغط على العجلة نفسها يفتح القسم مباشرة
+      isSpinning = false;
+      wheelHasLandedSegment = true; // الآن أصبح لمس العجلة نفسها (نقرًا أو سحبًا) يفتح القسم مباشرة
     }, 4150);
   };
-  btn.addEventListener('click', spin); // زر "أدر العجلة" يُدير دومًا، حتى بعد الهبوط
   let justDragged = false;
   disc.addEventListener('click', ()=>{
     if(justDragged){ justDragged = false; return; } // تجاهل نقرة click التلقائية التي يُطلقها المتصفح عقب السحب
     if(wheelHasLandedSegment){ openLandedSection(); } else { spin(); }
   });
 
-  // تحريك العجلة مباشرة بالسحب (إصبع أو فأرة) دون الحاجة لزر التدوير
+  // تحريك العجلة مباشرة بالسحب (إصبع أو فأرة) — الطريقة الوحيدة الآن للتدوير إلى جانب النقر المباشر
   let dragStartAngle = 0, dragLastAngle = 0, dragLastTime = 0, dragAngularVelocity = 0, isDragging = false, dragMoved = false;
   const getAngleFromCenter = (clientX, clientY)=>{
     const rect = disc.getBoundingClientRect();
@@ -5330,7 +5317,7 @@ function bindAchievementWheel(){
     return Math.atan2(clientY - cy, clientX - cx) * 180 / Math.PI;
   };
   const dragStart = (clientX, clientY)=>{
-    if(btn.disabled) return; // لا سحب أثناء دوران جارٍ بالفعل
+    if(isSpinning) return; // لا سحب أثناء دوران جارٍ بالفعل
     isDragging = true;
     dragMoved = false;
     disc.style.transition = 'none';
@@ -5357,8 +5344,8 @@ function bindAchievementWheel(){
     if(!isDragging) return;
     isDragging = false;
     if(dragMoved) justDragged = true; // سحبة حقيقية تحرَّكت فعليًا: نتجاهل نقرة click التالية
-    // سحبة سريعة بما يكفي (شبيهة بحركة "قذف" العجلة) تُشغِّل دورانًا كاملًا بنتيجة عشوائية، تمامًا كما لو ضُغط زر التدوير
-    if(Math.abs(dragAngularVelocity) > 3 && !btn.disabled){ spin(); }
+    // سحبة سريعة بما يكفي (شبيهة بحركة "قذف" العجلة) تُشغِّل دورانًا كاملًا بنتيجة عشوائية
+    if(Math.abs(dragAngularVelocity) > 3 && !isSpinning){ spin(); }
   };
   disc.addEventListener('pointerdown', (e)=>{ dragStart(e.clientX, e.clientY); });
   window.addEventListener('pointermove', (e)=>{ if(isDragging) dragMove(e.clientX, e.clientY); });
