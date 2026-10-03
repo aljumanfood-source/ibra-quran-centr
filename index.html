@@ -5264,67 +5264,57 @@ function renderAchievementWheel(){
     </div>
   `;
 }
+// يحدّد أي قسم يقع حاليًا تحت المؤشر العلوي الثابت، بناءً على زاوية دوران القرص الحالية
+function getSegmentAtPointer(rotationDeg){
+  const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
+  const slice = 360 / n;
+  const normalizedR = ((rotationDeg % 360) + 360) % 360;
+  const pointerOriginalAngle = (360 - normalizedR) % 360;
+  const idx = Math.floor(pointerOriginalAngle / slice) % n;
+  return ACHIEVEMENT_WHEEL_SEGMENTS[idx];
+}
+function getDiscRotation(disc){
+  return parseFloat((disc.style.transform.match(/rotate\(([-0-9.]+)deg\)/)||[0,0])[1]) || 0;
+}
 function bindAchievementWheel(){
   const disc = document.getElementById('achievementWheelDisc');
   const landedLabel = document.getElementById('wheelLandedLabel');
   if(!disc) return;
-  let isSpinning = false; // تحل محل الاعتماد على زر محذوف لتتبّع حالة الدوران
-  const openLandedSection = ()=>{
-    const seg = window.__lastWheelSegment;
-    if(!seg) return;
+  const updateLandedLabel = ()=>{
+    const seg = getSegmentAtPointer(getDiscRotation(disc));
+    window.__lastWheelSegment = seg;
+    if(landedLabel){
+      landedLabel.style.color = seg.color;
+      landedLabel.innerHTML = seg.emoji + ' القسم ' + seg.label;
+    }
+  };
+  const openCurrentSection = ()=>{
+    const seg = getSegmentAtPointer(getDiscRotation(disc));
     currentAchievementSection = seg.key;
     currentView = 'achievementSection';
     render();
   };
-  const spin = ()=>{
-    if(isSpinning) return;
-    isSpinning = true;
-    wheelHasLandedSegment = false; // أثناء الدوران: التفاعل مع العجلة يُدير من جديد، وليس فتحًا
-    if(landedLabel) landedLabel.textContent = '';
-    const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
-    const slice = 360 / n;
-    const idx = Math.floor(Math.random() * n);
-    const centerAngle = idx*slice + slice/2;
-    const targetMod = (360 - centerAngle + 360) % 360; // الزاوية التي يجب أن تستقر عندها العجلة كي يقع هذا القسم تحت المؤشر العلوي
-    wheelSpinCount++;
-    const totalRotation = wheelSpinCount * 1800 + targetMod; // دوران كبير متزايد دومًا لتفادي أي قفزة بصرية عكسية
-    disc.style.transition = 'transform 4s cubic-bezier(0.12,0.67,0.1,1)';
-    disc.style.transform = 'rotate(' + totalRotation + 'deg)';
-    window.__lastWheelSegment = ACHIEVEMENT_WHEEL_SEGMENTS[idx];
-    setTimeout(()=>{
-      const seg = window.__lastWheelSegment;
-      // اسم القسم يُكتب هنا بخط واضح وثابت لا يدور مع القرص، فيبقى مقروءًا دائمًا مهما كانت زاوية استقرار العجلة
-      if(landedLabel){
-        landedLabel.style.color = seg.color;
-        landedLabel.innerHTML = seg.emoji + ' القسم ' + seg.label;
-      }
-      spawnWheelConfetti();
-      isSpinning = false;
-      wheelHasLandedSegment = true; // الآن أصبح لمس العجلة نفسها (نقرًا أو سحبًا) يفتح القسم مباشرة
-    }, 4150);
-  };
+  updateLandedLabel(); // إظهار اسم القسم الواقع تحت المؤشر فور فتح الصفحة (حتى قبل أي تحريك)
+
   let justDragged = false;
   disc.addEventListener('click', ()=>{
     if(justDragged){ justDragged = false; return; } // تجاهل نقرة click التلقائية التي يُطلقها المتصفح عقب السحب
-    if(wheelHasLandedSegment){ openLandedSection(); } else { spin(); }
+    spawnWheelConfetti();
+    openCurrentSection(); // النقر يفتح دومًا القسم الذي اختاره الطالب فعليًا بوضعه تحت المؤشر — لا عشوائية إطلاقًا
   });
 
-  // تحريك العجلة مباشرة بالسحب (إصبع أو فأرة) — الطريقة الوحيدة الآن للتدوير إلى جانب النقر المباشر
-  let dragStartAngle = 0, dragLastAngle = 0, dragLastTime = 0, dragAngularVelocity = 0, isDragging = false, dragMoved = false;
+  // تحريك العجلة يدويًا بالكامل بالسحب (إصبع أو فأرة): تدور بمقدار حركة الإصبع تمامًا، وتستقر عند أقرب قسم عند الإفلات
+  let dragLastAngle = 0, isDragging = false, dragMoved = false;
   const getAngleFromCenter = (clientX, clientY)=>{
     const rect = disc.getBoundingClientRect();
     const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
     return Math.atan2(clientY - cy, clientX - cx) * 180 / Math.PI;
   };
   const dragStart = (clientX, clientY)=>{
-    if(isSpinning) return; // لا سحب أثناء دوران جارٍ بالفعل
     isDragging = true;
     dragMoved = false;
     disc.style.transition = 'none';
-    dragStartAngle = getAngleFromCenter(clientX, clientY);
-    dragLastAngle = dragStartAngle;
-    dragLastTime = Date.now();
-    dragAngularVelocity = 0;
+    dragLastAngle = getAngleFromCenter(clientX, clientY);
   };
   const dragMove = (clientX, clientY)=>{
     if(!isDragging) return;
@@ -5332,20 +5322,28 @@ function bindAchievementWheel(){
     let delta = angle - dragLastAngle;
     if(delta > 180) delta -= 360; if(delta < -180) delta += 360;
     if(Math.abs(delta) > 0.5) dragMoved = true;
-    const now = Date.now();
-    const dt = Math.max(1, now - dragLastTime);
-    dragAngularVelocity = delta / dt * 16; // تقريب لسرعة الزاوية لكل إطار (~١٦ مللي ثانية)
-    const current = (parseFloat((disc.style.transform.match(/rotate\(([-0-9.]+)deg\)/)||[0,0])[1]) || 0);
+    const current = getDiscRotation(disc);
     disc.style.transform = 'rotate(' + (current + delta) + 'deg)';
     dragLastAngle = angle;
-    dragLastTime = now;
+    updateLandedLabel(); // تحديث اسم القسم حيًّا أثناء السحب نفسه، لا بعد التوقف فقط
   };
   const dragEnd = ()=>{
     if(!isDragging) return;
     isDragging = false;
     if(dragMoved) justDragged = true; // سحبة حقيقية تحرَّكت فعليًا: نتجاهل نقرة click التالية
-    // سحبة سريعة بما يكفي (شبيهة بحركة "قذف" العجلة) تُشغِّل دورانًا كاملًا بنتيجة عشوائية
-    if(Math.abs(dragAngularVelocity) > 3 && !isSpinning){ spin(); }
+    // عند الإفلات: نُثبِّت العجلة بلطف عند مركز أقرب قسم لها (دون أي عشوائية)، فقط لضبط الموضع بدقة بصريًا
+    const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
+    const slice = 360 / n;
+    const current = getDiscRotation(disc);
+    const seg = getSegmentAtPointer(current);
+    const idx = ACHIEVEMENT_WHEEL_SEGMENTS.indexOf(seg);
+    const centerAngle = idx*slice + slice/2;
+    const targetMod = (360 - centerAngle + 360) % 360;
+    // أقرب دوران مكافئ لزاوية current يحقق targetMod (دون أي قفزة كبيرة، فقط ضبط دقيق لأقرب موضع)
+    const diff = ((targetMod - current) % 360 + 540) % 360 - 180;
+    disc.style.transition = 'transform 0.4s ease-out';
+    disc.style.transform = 'rotate(' + (current + diff) + 'deg)';
+    setTimeout(updateLandedLabel, 420);
   };
   disc.addEventListener('pointerdown', (e)=>{ dragStart(e.clientX, e.clientY); });
   window.addEventListener('pointermove', (e)=>{ if(isDragging) dragMove(e.clientX, e.clientY); });
