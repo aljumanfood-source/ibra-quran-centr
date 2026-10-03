@@ -5094,6 +5094,115 @@ function renderWeeklyScheduleSection(){
 let myProfileTaleemExpanded = false;
 let myProfileNahwExpanded = false;
 
+// بيانات عجلة الإنجاز: ٥ أقسام بألوان متناسقة ومبهجة تناسب أعمار ١٥-٢٠ سنة
+const ACHIEVEMENT_WHEEL_SEGMENTS = [
+  { key: 'spiritual', label: 'روحي', color: '#1abc9c', emoji: '🕌' },
+  { key: 'social', label: 'اجتماعي', color: '#ff8c42', emoji: '🤝' },
+  { key: 'health', label: 'صحي', color: '#ff5e78', emoji: '💪' },
+  { key: 'academic', label: 'علمي', color: '#4a90d9', emoji: '📘' },
+  { key: 'economic', label: 'اقتصادي', color: '#9b59b6', emoji: '💰' },
+];
+let wheelSpinCount = 0;
+function renderAchievementWheel(){
+  const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
+  const slice = 360 / n;
+  const gradientStops = ACHIEVEMENT_WHEEL_SEGMENTS.map((seg,i)=> seg.color+' '+(i*slice)+'deg '+((i+1)*slice)+'deg').join(', ');
+  const R = 112; // نصف قطر وضع التسميات (بالبكسل) داخل عجلة قطرها ٢٨٠
+  const labelsHtml = ACHIEVEMENT_WHEEL_SEGMENTS.map((seg,i)=>{
+    const centerAngle = i*slice + slice/2;
+    const rad = (centerAngle - 90) * Math.PI / 180; // تحويل بحيث تبدأ الزاوية صفر من الأعلى وتزيد باتجاه عقارب الساعة
+    const x = 140 + R * Math.cos(rad);
+    const y = 140 + R * Math.sin(rad);
+    return `<div style="position:absolute;left:${x}px;top:${y}px;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
+      <div style="font-size:20px;line-height:1;">${seg.emoji}</div>
+      <div style="font-size:12px;font-weight:900;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4);margin-top:2px;">${seg.label}</div>
+    </div>`;
+  }).join('');
+  return `
+    <div class="card" style="text-align:center;">
+      <h2 style="margin-bottom:2px;">🎡 عجلة الإنجاز</h2>
+      <p class="small-muted" style="margin:0 0 18px;">أدر العجلة واكتشف المجال الذي ستبدأ به رحلتك</p>
+      <div style="position:relative;width:280px;height:280px;margin:0 auto;">
+        <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:30px;z-index:3;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));">🔻</div>
+        <div id="achievementWheelDisc" style="width:280px;height:280px;border-radius:50%;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.25);border:6px solid #fff;outline:2px solid var(--gold);
+          background:conic-gradient(${gradientStops});transform:rotate(0deg);">
+          ${labelsHtml}
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:54px;height:54px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:24px;">🎯</div>
+        </div>
+      </div>
+      <button id="spinWheelBtn" class="btn btn-primary" style="margin-top:22px;padding:12px 34px;font-size:15px;border-radius:30px;">🌀 أدر العجلة</button>
+      <div id="wheelResultBox" style="display:none;margin-top:18px;"></div>
+    </div>
+  `;
+}
+function bindAchievementWheel(){
+  const btn = document.getElementById('spinWheelBtn');
+  const disc = document.getElementById('achievementWheelDisc');
+  const resultBox = document.getElementById('wheelResultBox');
+  if(!btn || !disc) return;
+  const spin = ()=>{
+    if(btn.disabled) return;
+    btn.disabled = true;
+    resultBox.style.display = 'none';
+    const n = ACHIEVEMENT_WHEEL_SEGMENTS.length;
+    const slice = 360 / n;
+    const idx = Math.floor(Math.random() * n);
+    const centerAngle = idx*slice + slice/2;
+    const targetMod = (360 - centerAngle + 360) % 360; // الزاوية التي يجب أن تستقر عندها العجلة كي يقع هذا القسم تحت المؤشر العلوي
+    wheelSpinCount++;
+    const totalRotation = wheelSpinCount * 1800 + targetMod; // دوران كبير متزايد دومًا لتفادي أي قفزة بصرية عكسية
+    disc.style.transition = 'transform 4s cubic-bezier(0.12,0.67,0.1,1)';
+    disc.style.transform = 'rotate(' + totalRotation + 'deg)';
+    window.__lastWheelSegment = ACHIEVEMENT_WHEEL_SEGMENTS[idx];
+    setTimeout(()=>{
+      const seg = window.__lastWheelSegment;
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <div style="background:${seg.color}1a;border:2px solid ${seg.color};border-radius:16px;padding:16px;">
+          <div style="font-size:34px;">${seg.emoji}</div>
+          <div style="font-weight:900;color:${seg.color};font-size:17px;margin-top:4px;">القسم ${seg.label}</div>
+          <div class="small-muted" style="margin-top:6px;">سنضيف هنا قريبًا طريقة كتابة أهدافك بإذن الله 🌱</div>
+        </div>`;
+      spawnWheelConfetti();
+      btn.disabled = false;
+    }, 4150);
+  };
+  btn.addEventListener('click', spin);
+  disc.addEventListener('click', spin);
+}
+function spawnWheelConfetti(){
+  const colors = ACHIEVEMENT_WHEEL_SEGMENTS.map(s=>s.color);
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden;';
+  document.body.appendChild(container);
+  const count = 36;
+  for(let i=0;i<count;i++){
+    const piece = document.createElement('div');
+    const color = colors[i % colors.length];
+    const startX = 50 + (Math.random()*20-10); // نسبة مئوية من عرض الشاشة، حول المنتصف
+    const dx = (Math.random()*220-110); // مدى الانتشار الأفقي بالبكسل
+    const dur = 1.1 + Math.random()*0.9;
+    const size = 6 + Math.random()*6;
+    const rot = Math.round(Math.random()*720-360);
+    piece.style.cssText = `position:absolute;left:${startX}%;top:38%;width:${size}px;height:${size}px;background:${color};
+      border-radius:${Math.random()<0.5?'50%':'2px'};opacity:1;
+      animation:wheelConfettiFall ${dur}s ease-out forwards;`;
+    piece.style.setProperty('--dx', dx+'px');
+    piece.style.setProperty('--rot', rot+'deg');
+    container.appendChild(piece);
+  }
+  if(!document.getElementById('wheelConfettiStyle')){
+    const style = document.createElement('style');
+    style.id = 'wheelConfettiStyle';
+    style.textContent = `@keyframes wheelConfettiFall{
+      0%{ transform:translate(0,0) rotate(0deg); opacity:1; }
+      100%{ transform:translate(var(--dx), 260px) rotate(var(--rot)); opacity:0; }
+    }`;
+    document.head.appendChild(style);
+  }
+  setTimeout(()=>{ container.remove(); }, 2200);
+}
+
 function renderMyProfileHome(){
   const profileId = currentUser?.role === 'student' ? currentUser.studentId : getSelfProfileId();
   const isSelfSupervisor = profileId === getSelfProfileId();
@@ -5133,18 +5242,8 @@ function renderMyProfileHome(){
       accordionHtml += `</div>`;
     }
   } else {
-    // صفحتي الخاصة بالطالب: أُبقيت فقط "القيادة" و"الملحوظات" بناءً على طلب صريح (بقية الفئات لم تُحذف من CATEGORIES، فقط لا تظهر هنا)
-    ['qiyada', 'notes'].forEach(key=>{
-      const cat = CATEGORIES[key];
-      if(!cat) return;
-      const countLabel = cat.special ? 'عرض التقرير' : (records.filter(r=>r.studentId===profileId && r.category===key).length + ' سجل');
-      iconsHtml += `
-        <div class="role-dial-item" data-myprofile-go="${key}">
-          <div class="dial-icon">${cat.icon}</div>
-          <div class="dial-title">${cat.label}</div>
-          <div class="dial-count">${countLabel}</div>
-        </div>`;
-    });
+    // صفحتي الخاصة بالطالب: استُبدلت أيقونتا القيادة والملحوظات بعجلة الإنجاز التفاعلية بناءً على طلب صريح
+    return renderNavBar(null) + renderAchievementWheel();
   }
 
   return renderNavBar(null) + `
@@ -5161,6 +5260,7 @@ function renderMyProfileHome(){
 
 function bindMyProfileHome(){
   bindCommon();
+  bindAchievementWheel(); // لا تفعل شيئًا إن لم تكن عناصر العجلة موجودة في الصفحة (مثل صفحة المشرف)
   document.querySelectorAll('[data-myprofile-go]').forEach(el=>{
     el.addEventListener('click', ()=>{
       const key = el.getAttribute('data-myprofile-go');
