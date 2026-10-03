@@ -5122,8 +5122,9 @@ function renderAchievementWheel(){
       <div style="font-size:12px;font-weight:900;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.4);margin-top:2px;">${seg.label}</div>
     </div>`;
   }).join('');
+  const softWash = ACHIEVEMENT_WHEEL_SEGMENTS.map(s=>s.color+'1f').join(', ');
   return `
-    <div class="card" style="text-align:center;">
+    <div class="card" style="text-align:center;background:linear-gradient(135deg, ${softWash});border:1px solid #ffffffaa;">
       <h2 style="margin-bottom:2px;">🎡 عجلة الإنجاز</h2>
       <p class="small-muted" style="margin:0 0 18px;">أدر العجلة واكتشف المجال الذي ستبدأ به رحلتك</p>
       <div style="position:relative;width:280px;height:280px;margin:0 auto;">
@@ -5186,7 +5187,7 @@ function bindAchievementWheel(){
 function renderAchievementSection(){
   const seg = ACHIEVEMENT_WHEEL_SEGMENTS.find(s=>s.key===currentAchievementSection) || ACHIEVEMENT_WHEEL_SEGMENTS[0];
   return renderNavBar('myProfileHome') + `
-    <div class="card" style="text-align:center;">
+    <div class="card" style="text-align:center;background:linear-gradient(160deg, ${seg.color}26, ${seg.color}08);border:1px solid ${seg.color}40;">
       <div style="width:90px;height:90px;border-radius:50%;background:${seg.color};display:flex;align-items:center;justify-content:center;font-size:42px;margin:0 auto 14px;box-shadow:0 6px 16px ${seg.color}55;">${seg.emoji}</div>
       <h2 style="color:${seg.color};border:none;">القسم ${seg.label}</h2>
       <div class="small-muted" style="margin-top:10px;">سنضيف هنا قريبًا طريقة كتابة أهدافك في هذا القسم بإذن الله 🌱</div>
